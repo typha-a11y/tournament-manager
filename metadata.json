@@ -1,0 +1,6 @@
+{
+  "name": "eFootball Tournament Manager",
+  "description": "24-Team eFootball Tournament Management Platform with Group Stages, 3rd Place Mini-League, Knockout Brackets, and Supabase Database.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
