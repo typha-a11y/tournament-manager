@@ -36,6 +36,7 @@ function TournamentAppInner() {
     saveMatchScore,
     deleteProfile,
     createTournament,
+    updateTeams,
     setTeams,
     setMatches,
     setFinalIsTwoLegs,
@@ -124,7 +125,7 @@ function TournamentAppInner() {
         {currentTab === 'teams' && (
           <TeamsListView
             teams={teams}
-            onUpdateTeams={setTeams}
+            onUpdateTeams={updateTeams}
             onConductDraw={() => setIsNewTournamentWizardOpen(true)}
           />
         )}

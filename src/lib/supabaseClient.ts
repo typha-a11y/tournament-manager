@@ -327,9 +327,33 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       return { success: false, message: mErr.message };
     }
 
-    const parsedTeams: Team[] = (teamsData || []).map((t) => ({
+    let finalTeamsData = teamsData || [];
+    let finalMatchesData = matchesData || [];
+
+    // Fallback if no teams found for tournamentId, check if any teams exist in DB
+    if (finalTeamsData.length === 0) {
+      const { data: allTeams } = await client
+        .from('teams')
+        .select('*')
+        .order('group_id', { ascending: true });
+      if (allTeams && allTeams.length > 0) {
+        finalTeamsData = allTeams;
+      }
+    }
+
+    if (finalMatchesData.length === 0) {
+      const { data: allMatches } = await client
+        .from('matches')
+        .select('*')
+        .order('round_number', { ascending: true });
+      if (allMatches && allMatches.length > 0) {
+        finalMatchesData = allMatches;
+      }
+    }
+
+    const parsedTeams: Team[] = finalTeamsData.map((t) => ({
       id: t.id,
-      tournament_id: t.tournament_id,
+      tournament_id: t.tournament_id || tournamentId,
       name: t.name,
       logo_url: t.logo_url,
       group_id: t.group_id,
@@ -339,9 +363,9 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       phone: t.phone || t.whatsapp || '',
     }));
 
-    const parsedMatches: Match[] = (matchesData || []).map((m) => ({
+    const parsedMatches: Match[] = finalMatchesData.map((m) => ({
       id: m.id,
-      tournament_id: m.tournament_id,
+      tournament_id: m.tournament_id || tournamentId,
       home_team_id: m.home_team_id,
       away_team_id: m.away_team_id,
       home_score: m.home_score,
@@ -359,6 +383,49 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
     return { success: true, teams: parsedTeams, matches: parsedMatches };
   } catch (err: unknown) {
     return { success: false, message: err instanceof Error ? err.message : 'Fetch failed' };
+  }
+}
+
+// Update multiple teams in Supabase (names, clubs, WhatsApp contacts, logos)
+export async function updateTournamentTeamsInSupabase(
+  teams: Team[],
+  tournamentId?: string
+): Promise<{ success: boolean; message: string }> {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, message: 'Supabase client is not configured' };
+
+  try {
+    const teamsPayload = teams.map((t) => ({
+      id: t.id && !t.id.startsWith('team-') ? t.id : undefined,
+      tournament_id: tournamentId || t.tournament_id,
+      name: t.name,
+      club_name: t.club_crest_name || t.name,
+      club_crest_name: t.club_crest_name || t.name,
+      logo_url: t.logo_url,
+      group_id: t.group_id,
+      pot: t.pot || 1,
+      phone: t.whatsapp || t.phone || '',
+      whatsapp: t.whatsapp || t.phone || '',
+    }));
+
+    const { error } = await client.from('teams').upsert(teamsPayload);
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    if (tournamentId) {
+      await client
+        .from('tournaments')
+        .update({ last_saved_at: new Date().toISOString() })
+        .eq('id', tournamentId);
+    }
+
+    return { success: true, message: 'Teams updated and synced successfully' };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to update teams in Supabase',
+    };
   }
 }
 

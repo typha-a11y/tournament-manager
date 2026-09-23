@@ -17,6 +17,7 @@ import {
   saveTournamentMatchScoreToSupabase,
   saveTournamentTieScoresToSupabase,
   testSupabaseConnection,
+  updateTournamentTeamsInSupabase,
 } from '../lib/supabaseClient';
 
 const STORAGE_PROFILES_KEY = 'efootball_tournament_profiles_v3';
@@ -117,6 +118,7 @@ interface TournamentContextType {
     newTeams: Team[],
     newMatches: Match[]
   ) => Promise<void>;
+  updateTeams: (newTeams: Team[]) => Promise<void>;
   setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
   setMatches: React.Dispatch<React.SetStateAction<Match[]>>;
   setProfiles: React.Dispatch<React.SetStateAction<TournamentProfile[]>>;
@@ -206,7 +208,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return false;
   });
 
-  // Check Supabase connection and pull tournaments
+  // Check Supabase connection and pull tournaments & active tournament data
   const checkSupabaseConnection = useCallback(async () => {
     const creds = getStoredCredentials();
     if (creds.url && creds.anonKey) {
@@ -216,23 +218,50 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setSyncStatus('synced');
         const remoteTourneys = await fetchTournamentsFromSupabase();
         if (remoteTourneys.success && remoteTourneys.data && remoteTourneys.data.length > 0) {
-          setProfiles((prev) => {
-            const mergedMap = new Map<string, TournamentProfile>();
-            prev.forEach((p) => mergedMap.set(p.id, p));
-            remoteTourneys.data?.forEach((rt) => {
-              mergedMap.set(rt.id, {
-                id: rt.id,
-                name: rt.name,
-                created_at: rt.created_at,
-                last_saved_at: rt.last_saved_at || rt.created_at,
-                current_phase: rt.current_phase || 'Group Stage',
-                group_mode: rt.group_mode || 'auto',
-                avatar_id: rt.avatar_id || 'trophy-gold',
-                avatar_color: rt.avatar_color || '#2563eb',
-              });
-            });
-            return Array.from(mergedMap.values());
-          });
+          const remoteList: TournamentProfile[] = remoteTourneys.data.map((rt) => ({
+            id: rt.id,
+            name: rt.name,
+            created_at: rt.created_at,
+            last_saved_at: rt.last_saved_at || rt.created_at,
+            current_phase: rt.current_phase || 'Group Stage - Round 1/6',
+            group_mode: rt.group_mode || 'auto',
+            avatar_id: rt.avatar_id || 'trophy-gold',
+            avatar_color: rt.avatar_color || '#2563eb',
+          }));
+
+          setProfiles(remoteList);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(remoteList));
+          }
+
+          // Determine target profile to display
+          const savedActiveId = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACTIVE_PROFILE_KEY) : null;
+          let targetProfileId = savedActiveId && remoteList.some((p) => p.id === savedActiveId)
+            ? savedActiveId
+            : remoteList[0].id;
+
+          setActiveTournamentIdState(targetProfileId);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(STORAGE_ACTIVE_PROFILE_KEY, targetProfileId);
+          }
+
+          // Immediately pull accurate teams and matches for this profile from Supabase
+          const remoteData = await fetchTournamentDataFromSupabase(targetProfileId);
+          if (remoteData.success) {
+            if (remoteData.teams && remoteData.teams.length > 0) {
+              const synced = syncTeamsWithOfficialData(remoteData.teams);
+              setTeams(synced);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`efootball_teams_${targetProfileId}`, JSON.stringify(synced));
+              }
+            }
+            if (remoteData.matches && remoteData.matches.length > 0) {
+              setMatches(remoteData.matches);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`efootball_matches_${targetProfileId}`, JSON.stringify(remoteData.matches));
+              }
+            }
+          }
         }
       } else {
         setSyncStatus('offline');
@@ -530,6 +559,25 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [isSupabaseConnected]
   );
 
+  // Update teams with direct Supabase synchronization
+  const updateTeams = useCallback(
+    async (newTeams: Team[]) => {
+      const synced = syncTeamsWithOfficialData(newTeams);
+      setTeams(synced);
+
+      if (typeof window !== 'undefined' && activeTournamentId) {
+        localStorage.setItem(`efootball_teams_${activeTournamentId}`, JSON.stringify(synced));
+      }
+
+      if (isSupabaseConnected && activeTournamentId) {
+        setSyncStatus('saving');
+        await updateTournamentTeamsInSupabase(synced, activeTournamentId);
+        setSyncStatus('synced');
+      }
+    },
+    [activeTournamentId, isSupabaseConnected]
+  );
+
   return (
     <TournamentContext.Provider
       value={{
@@ -547,6 +595,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         saveTieScores,
         deleteProfile,
         createTournament,
+        updateTeams,
         setTeams,
         setMatches,
         setProfiles,
