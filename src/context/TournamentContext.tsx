@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { GroupLetter, Match, Team, TournamentProfile } from '../types/tournament';
 import { INITIAL_TEAMS, OFFICIAL_TEAM_DATA_LIST } from '../lib/constants';
-import { generateGroupMatches, generateRoundOf16Matches } from '../lib/tournamentEngine';
+import { generateGroupMatches, generateRoundOf16Matches, synchronizeKnockoutProgression } from '../lib/tournamentEngine';
 import { getReliableClubLogo } from '../lib/logoDictionary';
 import {
   createTournamentInSupabase,
@@ -58,31 +58,38 @@ const INITIAL_PROFILES_PRESET: TournamentProfile[] = [
   },
 ];
 
-// Helper to ensure official team logos & club mappings
+// Helper to ensure official team logos & club mappings while preserving user edits
 export function syncTeamsWithOfficialData(rawTeams: Team[]): Team[] {
   if (!rawTeams || rawTeams.length === 0) return INITIAL_TEAMS;
-  return rawTeams.map((t) => {
+  return rawTeams.map((t, idx) => {
     const lowerName = (t.name || '').toLowerCase().trim();
     const isRogerMuncaster = lowerName.includes('roger') || lowerName.includes('muncaster');
     const isJazzynorman = lowerName.includes('jazzy') || lowerName.includes('norman');
 
-    const official = OFFICIAL_TEAM_DATA_LIST.find(
-      (o) => o.name.toLowerCase().trim() === lowerName
-    );
+    const official =
+      OFFICIAL_TEAM_DATA_LIST.find(
+        (o) => o.name.toLowerCase().trim() === lowerName
+      ) || OFFICIAL_TEAM_DATA_LIST[idx];
 
-    const clubCrestName = isRogerMuncaster
+    const clubCrestName = t.club_crest_name || (isRogerMuncaster
       ? 'Paris Saint-Germain'
       : isJazzynorman
       ? 'Corinthians'
-      : official?.clubName || t.club_crest_name;
+      : official?.clubName);
 
     const reliableLogo = getReliableClubLogo(
       clubCrestName || t.name,
-      official?.logoUrl || t.logo_url
+      t.logo_url || official?.logoUrl
     );
+
+    const whatsapp = t.whatsapp ?? t.phone ?? official?.whatsapp ?? '';
+    const phone = t.phone ?? t.whatsapp ?? official?.phone ?? '';
 
     return {
       ...t,
+      name: t.name || official?.name || `Team ${idx + 1}`,
+      whatsapp,
+      phone,
       logo_url: reliableLogo,
       club_crest_name: clubCrestName,
       group_id: (t.group_id ?? official?.groupId ?? null) as GroupLetter | null,
@@ -384,9 +391,11 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
 
       // 1. Optimistic local update
-      setMatches((prev) =>
-        prev.map((m) => (m.id === enrichedMatch.id ? enrichedMatch : m))
-      );
+      setMatches((prev) => {
+        const nextList = prev.map((m) => (m.id === enrichedMatch.id ? enrichedMatch : m));
+        const sync = synchronizeKnockoutProgression(nextList, teams, finalIsTwoLegs);
+        return sync.updatedMatches;
+      });
 
       // 2. Update profile timestamp
       const now = new Date().toISOString();
@@ -421,13 +430,15 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
 
       // 1. Optimistic update
-      setMatches((prev) =>
-        prev.map((m) => {
+      setMatches((prev) => {
+        const nextList = prev.map((m) => {
           if (m.id === enrichedLeg1.id) return enrichedLeg1;
           if (m.id === enrichedLeg2.id) return enrichedLeg2;
           return m;
-        })
-      );
+        });
+        const sync = synchronizeKnockoutProgression(nextList, teams, finalIsTwoLegs);
+        return sync.updatedMatches;
+      });
 
       // 2. Update profile timestamp
       const now = new Date().toISOString();

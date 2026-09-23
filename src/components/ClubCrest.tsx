@@ -43,16 +43,25 @@ export const ClubCrest: React.FC<ClubCrestProps> = ({
   const displayName = clubName || teamName || name || 'Club';
 
   const resolveInitialUrl = () => {
-    // Check specific club name first, then team/player name, then general
-    const fromClub = clubName ? getReliableClubLogo(clubName) : '';
-    if (fromClub) return fromClub;
+    // 1. Prioritize explicit club crest name
+    if (clubName) {
+      const fromClub = getReliableClubLogo(clubName);
+      if (fromClub) return fromClub;
+    }
 
-    const fromTeam = teamName ? getReliableClubLogo(teamName) : '';
-    if (fromTeam) return fromTeam;
+    // 2. Check team/player name
+    if (teamName) {
+      const fromTeam = getReliableClubLogo(teamName);
+      if (fromTeam) return fromTeam;
+    }
 
-    const fromName = name ? getReliableClubLogo(name) : '';
-    if (fromName) return fromName;
+    // 3. Check generic name
+    if (name) {
+      const fromName = getReliableClubLogo(name);
+      if (fromName) return fromName;
+    }
 
+    // 4. Check fallback logoUrl
     return getReliableClubLogo(displayName, logoUrl) || logoUrl || '';
   };
 
@@ -68,13 +77,14 @@ export const ClubCrest: React.FC<ClubCrestProps> = ({
   }, [logoUrl, clubName, teamName, name]);
 
   const handleImageError = () => {
-    // Try secondary fallback URL before falling back to Lucide crest
     if (!triedSecondary) {
       setTriedSecondary(true);
       const secondary =
         (clubName && getSecondaryFallbackLogo(clubName)) ||
         (teamName && getSecondaryFallbackLogo(teamName)) ||
+        (name && getSecondaryFallbackLogo(name)) ||
         getSecondaryFallbackLogo(displayName);
+
       if (secondary && secondary !== currentSrc) {
         setCurrentSrc(secondary);
         return;
@@ -83,7 +93,6 @@ export const ClubCrest: React.FC<ClubCrestProps> = ({
     setHasError(true);
   };
 
-  // Fallback UI: sleek, generic crest icon from Lucide React, NOT raw text
   if (!currentSrc || hasError) {
     return (
       <div

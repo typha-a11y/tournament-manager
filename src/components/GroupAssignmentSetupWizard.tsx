@@ -441,7 +441,8 @@ export const GroupAssignmentSetupWizard: React.FC<GroupAssignmentSetupWizardProp
                     <div className="p-1 bg-white rounded-lg border border-slate-200 shrink-0 shadow-2xs">
                       <ClubCrest
                         logoUrl={team.logo_url}
-                        name={team.club_crest_name || team.name}
+                        clubName={team.club_crest_name}
+                        teamName={team.name}
                         size="md"
                       />
                     </div>
@@ -572,7 +573,8 @@ export const GroupAssignmentSetupWizard: React.FC<GroupAssignmentSetupWizardProp
                               <div className="flex items-center gap-2 mb-1.5">
                                 <ClubCrest
                                   logoUrl={t.logo_url}
-                                  name={t.club_crest_name || t.name}
+                                  clubName={t.club_crest_name}
+                                  teamName={t.name}
                                   size="xs"
                                 />
                                 <span className="font-bold text-xs text-slate-900 truncate">
@@ -657,7 +659,8 @@ export const GroupAssignmentSetupWizard: React.FC<GroupAssignmentSetupWizardProp
                               <div className="flex items-center gap-2 min-w-0">
                                 <ClubCrest
                                   logoUrl={team.logo_url}
-                                  name={team.club_crest_name || team.name}
+                                  clubName={team.club_crest_name}
+                                  teamName={team.name}
                                   size="xs"
                                 />
                                 <div className="truncate">
@@ -776,7 +779,8 @@ export const GroupAssignmentSetupWizard: React.FC<GroupAssignmentSetupWizardProp
                               </span>
                               <ClubCrest
                                 logoUrl={team.logo_url}
-                                name={team.club_crest_name || team.name}
+                                clubName={team.club_crest_name}
+                                teamName={team.name}
                                 size="sm"
                               />
                               <div className="truncate">

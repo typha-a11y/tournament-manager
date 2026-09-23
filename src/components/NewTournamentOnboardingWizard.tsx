@@ -439,6 +439,7 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                     <div className="relative mb-2">
                       <ClubCrest
                         logoUrl={team.logo_url}
+                        clubName={team.club_crest_name}
                         teamName={team.name}
                         size="md"
                         className="p-1.5"
@@ -570,7 +571,12 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                                 : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
                             }`}
                           >
-                            <ClubCrest logoUrl={team.logo_url} teamName={team.name} size="xs" />
+                            <ClubCrest
+                              logoUrl={team.logo_url}
+                              clubName={team.club_crest_name}
+                              teamName={team.name}
+                              size="xs"
+                            />
                             <span>{team.name}</span>
                           </button>
                         ))}
@@ -612,7 +618,12 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                                 className="flex items-center justify-between px-2 py-1.5 bg-slate-50 rounded-lg text-xs"
                               >
                                 <div className="flex items-center gap-2 truncate">
-                                  <ClubCrest logoUrl={t.logo_url} teamName={t.name} size="xs" />
+                                  <ClubCrest
+                                    logoUrl={t.logo_url}
+                                    clubName={t.club_crest_name}
+                                    teamName={t.name}
+                                    size="xs"
+                                  />
                                   <span className="font-bold text-slate-900 truncate">
                                     {t.name}
                                   </span>
@@ -676,7 +687,12 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                           <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
                             P{t.pot || idx + 1}
                           </span>
-                          <ClubCrest logoUrl={t.logo_url} teamName={t.name} size="sm" />
+                          <ClubCrest
+                            logoUrl={t.logo_url}
+                            clubName={t.club_crest_name}
+                            teamName={t.name}
+                            size="sm"
+                          />
                           <div className="truncate">
                             <div className="text-xs font-bold text-slate-900 truncate">
                               {t.name}
@@ -740,6 +756,7 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                             {homeTeam && (
                               <ClubCrest
                                 logoUrl={homeTeam.logo_url}
+                                clubName={homeTeam.club_crest_name}
                                 teamName={homeTeam.name}
                                 size="xs"
                               />
@@ -754,6 +771,7 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                             {awayTeam && (
                               <ClubCrest
                                 logoUrl={awayTeam.logo_url}
+                                clubName={awayTeam.club_crest_name}
                                 teamName={awayTeam.name}
                                 size="xs"
                               />

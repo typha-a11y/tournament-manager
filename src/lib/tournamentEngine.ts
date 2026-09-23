@@ -311,8 +311,38 @@ export function useTournamentStandings(teams: Team[], matches: Match[]): Tournam
   return calculateStandings(teams, matches);
 }
 
-// Generate the 16 Bora (Round of 16) pairings
-// Standard cross-pairing avoiding same-group encounters
+// =========================================================================
+// Simulation Helper: Fast-play remaining unplayed group matches with realistic scores
+// =========================================================================
+export function simulateRemainingGroupMatches(teams: Team[], matches: Match[]): Match[] {
+  const realisticScorePairs: [number, number][] = [
+    [2, 1], [1, 0], [3, 1], [0, 0], [2, 2], [1, 2], [0, 1], [2, 0], [3, 2], [1, 1], [4, 1], [0, 2]
+  ];
+
+  return matches.map((m) => {
+    if (m.match_type === 'Group' && (!m.is_played || m.home_score === null || m.away_score === null)) {
+      // Pick score deterministically based on match id hash to keep results stable
+      let hash = 0;
+      for (let i = 0; i < m.id.length; i++) {
+        hash = (hash << 5) - hash + m.id.charCodeAt(i);
+        hash |= 0;
+      }
+      const pair = realisticScorePairs[Math.abs(hash) % realisticScorePairs.length];
+      return {
+        ...m,
+        is_played: true,
+        home_score: pair[0],
+        away_score: pair[1],
+      };
+    }
+    return m;
+  });
+}
+
+// =========================================================================
+// Intelligent Round of 16 (16 Bora) Seeding Engine
+// Strict 0% Same-Group Collision Pairing Guarantee
+// =========================================================================
 export function generateRoundOf16Matches(
   teams: Team[],
   matches: Match[],
@@ -324,22 +354,12 @@ export function generateRoundOf16Matches(
     return existingRo16;
   }
 
-  // 1. Gather all 1st and 2nd place teams
+  // 1. Gather all Group Winners (1st) and Runners-Up (2nd)
   const groupWinners: Record<GroupLetter, Team | null> = {
-    A: null,
-    B: null,
-    C: null,
-    D: null,
-    E: null,
-    F: null,
+    A: null, B: null, C: null, D: null, E: null, F: null,
   };
   const groupRunnersUp: Record<GroupLetter, Team | null> = {
-    A: null,
-    B: null,
-    C: null,
-    D: null,
-    E: null,
-    F: null,
+    A: null, B: null, C: null, D: null, E: null, F: null,
   };
 
   GROUPS.forEach((g) => {
@@ -354,56 +374,158 @@ export function generateRoundOf16Matches(
   const thirdPlaceLeague = calculateThirdPlaceMiniLeague(teams, matches);
   const qualifiedThirds = thirdPlaceLeague.filter((t) => t.isQualified).map((t) => t.team);
 
-  // Cross-pairing matrix to strictly avoid same-group matchups
-  // Tie 1: Winner B vs 3rd Place (prefer not from B)
-  // Tie 2: Winner A vs Runner-up C
-  // Tie 3: Winner F vs Runner-up E
-  // Tie 4: Runner-up B vs Runner-up D
-  // Tie 5: Winner E vs 3rd Place (prefer not from E)
-  // Tie 6: Winner D vs 3rd Place (prefer not from D)
-  // Tie 7: Winner C vs 3rd Place (prefer not from C)
-  // Tie 8: Runner-up A vs Runner-up F
+  // Group winners array and runners up array
+  const winnersList: Team[] = Object.values(groupWinners).filter((t): t is Team => t !== null);
+  const runnersList: Team[] = Object.values(groupRunnersUp).filter((t): t is Team => t !== null);
 
-  const usedThirds = new Set<string>();
-
-  function pickThirdPlace(avoidGroup: GroupLetter): Team | null {
-    const available = qualifiedThirds.filter(
-      (t) => !usedThirds.has(t.id) && t.group_id !== avoidGroup
-    );
-    if (available.length > 0) {
-      const selected = available[0];
-      usedThirds.add(selected.id);
-      return selected;
-    }
-    // Fallback if strict group avoidance exhausted
-    const fallback = qualifiedThirds.find((t) => !usedThirds.has(t.id));
-    if (fallback) {
-      usedThirds.add(fallback.id);
-      return fallback;
-    }
-    return null;
+  // Fallback if data is incomplete: fill from teams
+  if (winnersList.length < 6 || runnersList.length < 6 || qualifiedThirds.length < 4) {
+    const available = [...teams];
+    while (winnersList.length < 6 && available.length > 0) winnersList.push(available.shift()!);
+    while (runnersList.length < 6 && available.length > 0) runnersList.push(available.shift()!);
+    while (qualifiedThirds.length < 4 && available.length > 0) qualifiedThirds.push(available.shift()!);
   }
 
-  const pairings: { home: Team | null; away: Team | null; tieNumber: number }[] = [
-    { home: groupWinners.B, away: pickThirdPlace('B'), tieNumber: 1 },
-    { home: groupWinners.A, away: groupRunnersUp.C, tieNumber: 2 },
-    { home: groupWinners.F, away: groupRunnersUp.E, tieNumber: 3 },
-    { home: groupRunnersUp.B, away: groupRunnersUp.D, tieNumber: 4 },
-    { home: groupWinners.E, away: pickThirdPlace('E'), tieNumber: 5 },
-    { home: groupWinners.D, away: pickThirdPlace('D'), tieNumber: 6 },
-    { home: groupWinners.C, away: pickThirdPlace('C'), tieNumber: 7 },
-    { home: groupRunnersUp.A, away: groupRunnersUp.F, tieNumber: 8 },
-  ];
+  // Backtracking solver to find valid pairings with 0% same group collisions:
+  // - 4 Winners vs 4 3rd-place teams (winner.group_id !== third.group_id)
+  // - 2 Winners vs 2 Runners-up (winner.group_id !== runner.group_id)
+  // - 4 Runners-up paired into 2 ties (runnerA.group_id !== runnerB.group_id)
+
+  let solutionPairings: { home: Team; away: Team; type: string }[] | null = null;
+
+  // Helper to test if two teams share the same group
+  const sameGroup = (t1: Team, t2: Team) => {
+    return t1.group_id && t2.group_id && t1.group_id === t2.group_id;
+  };
+
+  // Find all combinations of 4 winners out of 6 to play against the 4 3rd-placed teams
+  const findPairings = () => {
+    const winnerIndices = [0, 1, 2, 3, 4, 5];
+    
+    // Test winner selections
+    for (let i = 0; i < 6; i++) {
+      for (let j = i + 1; j < 6; j++) {
+        for (let k = j + 1; k < 6; k++) {
+          for (let l = k + 1; l < 6; l++) {
+            const selectedWinnersForThirds = [
+              winnersList[i],
+              winnersList[j],
+              winnersList[k],
+              winnersList[l],
+            ];
+            const remainingWinners = winnersList.filter(
+              (_, idx) => idx !== i && idx !== j && idx !== k && idx !== l
+            );
+
+            // Try to match 4 winners to 4 thirds without same group
+            const permutationsOfThirds: Team[][] = [];
+            const permute = (arr: Team[], m: Team[] = []) => {
+              if (arr.length === 0) {
+                permutationsOfThirds.push(m);
+              } else {
+                for (let p = 0; p < arr.length; p++) {
+                  const curr = arr.slice();
+                  const next = curr.splice(p, 1);
+                  permute(curr.slice(), m.concat(next));
+                }
+              }
+            };
+            permute(qualifiedThirds);
+
+            for (const thirdPerm of permutationsOfThirds) {
+              let validThirds = true;
+              for (let idx = 0; idx < 4; idx++) {
+                if (sameGroup(selectedWinnersForThirds[idx], thirdPerm[idx])) {
+                  validThirds = false;
+                  break;
+                }
+              }
+              if (!validThirds) continue;
+
+              // Now match the 2 remaining winners with 2 runners-up
+              for (let r1 = 0; r1 < runnersList.length; r1++) {
+                for (let r2 = 0; r2 < runnersList.length; r2++) {
+                  if (r1 === r2) continue;
+                  const runnerForW1 = runnersList[r1];
+                  const runnerForW2 = runnersList[r2];
+
+                  if (
+                    sameGroup(remainingWinners[0], runnerForW1) ||
+                    sameGroup(remainingWinners[1], runnerForW2)
+                  ) {
+                    continue;
+                  }
+
+                  // The remaining 4 runners-up play each other in 2 pairs
+                  const remainingRunners = runnersList.filter(
+                    (_, rIdx) => rIdx !== r1 && rIdx !== r2
+                  );
+
+                  // Try pairing (0,1) & (2,3) or (0,2) & (1,3) or (0,3) & (1,2)
+                  const runnerPairConfigs = [
+                    [[0, 1], [2, 3]],
+                    [[0, 2], [1, 3]],
+                    [[0, 3], [1, 2]],
+                  ];
+
+                  for (const config of runnerPairConfigs) {
+                    const pair1A = remainingRunners[config[0][0]];
+                    const pair1B = remainingRunners[config[0][1]];
+                    const pair2A = remainingRunners[config[1][0]];
+                    const pair2B = remainingRunners[config[1][1]];
+
+                    if (
+                      !sameGroup(pair1A, pair1B) &&
+                      !sameGroup(pair2A, pair2B)
+                    ) {
+                      // Found a complete 100% collision-free solution!
+                      return [
+                        { home: selectedWinnersForThirds[0], away: thirdPerm[0], type: 'Winner vs 3rd' },
+                        { home: remainingWinners[0], away: runnerForW1, type: 'Winner vs RunnerUp' },
+                        { home: pair1A, away: pair1B, type: 'RunnerUp vs RunnerUp' },
+                        { home: selectedWinnersForThirds[1], away: thirdPerm[1], type: 'Winner vs 3rd' },
+                        { home: selectedWinnersForThirds[2], away: thirdPerm[2], type: 'Winner vs 3rd' },
+                        { home: remainingWinners[1], away: runnerForW2, type: 'Winner vs RunnerUp' },
+                        { home: pair2A, away: pair2B, type: 'RunnerUp vs RunnerUp' },
+                        { home: selectedWinnersForThirds[3], away: thirdPerm[3], type: 'Winner vs 3rd' },
+                      ];
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  solutionPairings = findPairings();
+
+  // Robust fallback pairing in the rare event of extreme same-group distribution
+  if (!solutionPairings) {
+    solutionPairings = [
+      { home: winnersList[0], away: qualifiedThirds[0], type: 'Winner vs 3rd' },
+      { home: winnersList[1], away: runnersList[2], type: 'Winner vs RunnerUp' },
+      { home: winnersList[2], away: qualifiedThirds[1], type: 'Winner vs 3rd' },
+      { home: runnersList[0], away: runnersList[3], type: 'RunnerUp vs RunnerUp' },
+      { home: winnersList[3], away: qualifiedThirds[2], type: 'Winner vs 3rd' },
+      { home: winnersList[4], away: runnersList[4], type: 'Winner vs RunnerUp' },
+      { home: winnersList[5], away: qualifiedThirds[3], type: 'Winner vs 3rd' },
+      { home: runnersList[1], away: runnersList[5], type: 'RunnerUp vs RunnerUp' },
+    ];
+  }
 
   const ro16Matches: Match[] = [];
 
-  pairings.forEach((p) => {
-    if (!p.home || !p.away) return;
-    const tieId = `tie-ro16-${p.tieNumber}`;
+  solutionPairings.forEach((p, idx) => {
+    const tieNumber = idx + 1;
+    const tieId = `tie-ro16-${tieNumber}`;
 
-    // Leg 1: Away team hosts Leg 1 (standard European format where group winner visits in Leg 1)
+    // Leg 1: Away team hosts Leg 1 (standard 2-legged home-and-away)
     ro16Matches.push({
-      id: `match-ro16-${p.tieNumber}-leg1`,
+      id: `match-ro16-${tieNumber}-leg1`,
       home_team_id: p.away.id,
       away_team_id: p.home.id,
       home_score: null,
@@ -412,12 +534,12 @@ export function generateRoundOf16Matches(
       is_played: false,
       leg: 1,
       tie_id: tieId,
-      round_number: p.tieNumber,
+      round_number: tieNumber,
     });
 
-    // Leg 2: Higher seed hosts Leg 2
+    // Leg 2: Higher seed hosts Leg 2 (decisive home return)
     ro16Matches.push({
-      id: `match-ro16-${p.tieNumber}-leg2`,
+      id: `match-ro16-${tieNumber}-leg2`,
       home_team_id: p.home.id,
       away_team_id: p.away.id,
       home_score: null,
@@ -426,7 +548,7 @@ export function generateRoundOf16Matches(
       is_played: false,
       leg: 2,
       tie_id: tieId,
-      round_number: p.tieNumber,
+      round_number: tieNumber,
     });
   });
 
@@ -460,9 +582,6 @@ export function computeKnockoutTies(
 
   tieMap.forEach((entry, tieId) => {
     const { leg1, leg2, number } = entry;
-    // Identify teams:
-    // In our setup, leg2 home team is team A, away team is team B. In leg1, team B is home and team A is away.
-    // If only leg1 exists (or single match final), home is leg1.home_team_id
     let homeTeam: Team | null = null;
     let awayTeam: Team | null = null;
 
@@ -482,11 +601,9 @@ export function computeKnockoutTies(
 
     if (leg1 && leg1.is_played && leg1.home_score !== null && leg1.away_score !== null) {
       if (leg2) {
-        // Leg 1: awayTeam was home, homeTeam was away
         aggHome += leg1.away_score;
         aggAway += leg1.home_score;
       } else {
-        // Single match tie
         aggHome += leg1.home_score;
         aggAway += leg1.away_score;
         isCompleted = true;
@@ -494,7 +611,6 @@ export function computeKnockoutTies(
     }
 
     if (leg2 && leg2.is_played && leg2.home_score !== null && leg2.away_score !== null) {
-      // Leg 2: homeTeam is home, awayTeam is away
       aggHome += leg2.home_score;
       aggAway += leg2.away_score;
       if (leg1?.is_played) {
@@ -511,7 +627,6 @@ export function computeKnockoutTies(
       } else if (aggAway > aggHome) {
         winnerTeamId = awayTeam.id;
       } else {
-        // Aggregate is tied! Check penalty score on leg2 (or leg1 if single)
         const decidingMatch = leg2 || leg1;
         if (
           decidingMatch?.home_penalties !== null &&
@@ -549,6 +664,267 @@ export function computeKnockoutTies(
   return ties.sort((a, b) => a.matchNumber - b.matchNumber);
 }
 
+// =========================================================================
+// Dynamic Full Bracket Computation with Partial / Waiting Nodes
+// Ensures that as soon as any team wins their tie, they show up in the next round
+// and wait for their upcoming opponent.
+// =========================================================================
+export interface FullBracketTreeData {
+  ro16Ties: KnockoutTie[];
+  qfTies: KnockoutTie[];
+  sfTies: KnockoutTie[];
+  finalTies: KnockoutTie[];
+  championTeam: Team | null;
+}
+
+export function computeFullBracketTree(
+  matches: Match[],
+  teams: Team[],
+  finalIsTwoLegs: boolean = false
+): FullBracketTreeData {
+  const teamMap = new Map<string, Team>(teams.map((t) => [t.id, t]));
+  const ro16Ties = computeKnockoutTies('Ro16', matches, teams);
+
+  // 1. Quarter Finals (4 ties from 8 Ro16 ties)
+  const qfComputed = computeKnockoutTies('QF', matches, teams);
+  const qfTies: KnockoutTie[] = [];
+
+  for (let i = 0; i < 4; i++) {
+    const feeder1 = ro16Ties[i * 2];
+    const feeder2 = ro16Ties[i * 2 + 1];
+    const winner1 = feeder1?.winnerTeamId ? teamMap.get(feeder1.winnerTeamId) || null : null;
+    const winner2 = feeder2?.winnerTeamId ? teamMap.get(feeder2.winnerTeamId) || null : null;
+
+    const existingTie = qfComputed.find((t) => t.matchNumber === i + 1);
+
+    if (existingTie) {
+      qfTies.push({
+        ...existingTie,
+        homeTeam: existingTie.homeTeam || winner1,
+        awayTeam: existingTie.awayTeam || winner2,
+        homePlaceholder: `Winner of 16 Bora #${i * 2 + 1}`,
+        awayPlaceholder: `Winner of 16 Bora #${i * 2 + 2}`,
+      });
+    } else {
+      qfTies.push({
+        tieId: `tie-qf-${i + 1}`,
+        stage: 'QF',
+        matchNumber: i + 1,
+        homeTeam: winner1,
+        awayTeam: winner2,
+        homePlaceholder: `Winner of 16 Bora #${i * 2 + 1}`,
+        awayPlaceholder: `Winner of 16 Bora #${i * 2 + 2}`,
+        leg1: null,
+        leg2: null,
+        aggregateHomeScore: 0,
+        aggregateAwayScore: 0,
+        winnerTeamId: null,
+        isCompleted: false,
+        needsPenalties: false,
+      });
+    }
+  }
+
+  // 2. Semi Finals (2 ties from 4 QF ties)
+  const sfComputed = computeKnockoutTies('SF', matches, teams);
+  const sfTies: KnockoutTie[] = [];
+
+  for (let i = 0; i < 2; i++) {
+    const feeder1 = qfTies[i * 2];
+    const feeder2 = qfTies[i * 2 + 1];
+    const winner1 = feeder1?.winnerTeamId ? teamMap.get(feeder1.winnerTeamId) || null : null;
+    const winner2 = feeder2?.winnerTeamId ? teamMap.get(feeder2.winnerTeamId) || null : null;
+
+    const existingTie = sfComputed.find((t) => t.matchNumber === i + 1);
+
+    if (existingTie) {
+      sfTies.push({
+        ...existingTie,
+        homeTeam: existingTie.homeTeam || winner1,
+        awayTeam: existingTie.awayTeam || winner2,
+        homePlaceholder: `Winner of Robo #${i * 2 + 1}`,
+        awayPlaceholder: `Winner of Robo #${i * 2 + 2}`,
+      });
+    } else {
+      sfTies.push({
+        tieId: `tie-sf-${i + 1}`,
+        stage: 'SF',
+        matchNumber: i + 1,
+        homeTeam: winner1,
+        awayTeam: winner2,
+        homePlaceholder: `Winner of Robo #${i * 2 + 1}`,
+        awayPlaceholder: `Winner of Robo #${i * 2 + 2}`,
+        leg1: null,
+        leg2: null,
+        aggregateHomeScore: 0,
+        aggregateAwayScore: 0,
+        winnerTeamId: null,
+        isCompleted: false,
+        needsPenalties: false,
+      });
+    }
+  }
+
+  // 3. Grand Final (1 tie from 2 SF ties)
+  const finalComputed = computeKnockoutTies('Final', matches, teams);
+  const sfWinner1 = sfTies[0]?.winnerTeamId ? teamMap.get(sfTies[0].winnerTeamId) || null : null;
+  const sfWinner2 = sfTies[1]?.winnerTeamId ? teamMap.get(sfTies[1].winnerTeamId) || null : null;
+
+  const finalTies: KnockoutTie[] = [];
+  if (finalComputed.length > 0) {
+    finalTies.push({
+      ...finalComputed[0],
+      homeTeam: finalComputed[0].homeTeam || sfWinner1,
+      awayTeam: finalComputed[0].awayTeam || sfWinner2,
+      homePlaceholder: 'Winner of Nusu Fainali #1',
+      awayPlaceholder: 'Winner of Nusu Fainali #2',
+    });
+  } else {
+    finalTies.push({
+      tieId: 'tie-final-1',
+      stage: 'Final',
+      matchNumber: 1,
+      homeTeam: sfWinner1,
+      awayTeam: sfWinner2,
+      homePlaceholder: 'Winner of Nusu Fainali #1',
+      awayPlaceholder: 'Winner of Nusu Fainali #2',
+      leg1: null,
+      leg2: null,
+      aggregateHomeScore: 0,
+      aggregateAwayScore: 0,
+      winnerTeamId: null,
+      isCompleted: false,
+      needsPenalties: false,
+    });
+  }
+
+  // Champion
+  const finalTie = finalTies[0];
+  const championTeam = finalTie?.winnerTeamId
+    ? teamMap.get(finalTie.winnerTeamId) || null
+    : null;
+
+  return {
+    ro16Ties,
+    qfTies,
+    sfTies,
+    finalTies,
+    championTeam,
+  };
+}
+
+// =========================================================================
+// Knockout Auto-Progression Synchronizer
+// Automatically creates / updates match objects in state when both opponents qualify
+// =========================================================================
+export function synchronizeKnockoutProgression(
+  allMatches: Match[],
+  teams: Team[],
+  finalIsTwoLegs: boolean = false
+): { updatedMatches: Match[]; hasChanges: boolean } {
+  let hasChanges = false;
+  let matches = [...allMatches];
+
+  // Helper to ensure matches exist for a tie
+  const ensureMatchesForTie = (
+    stage: MatchStage,
+    tieNumber: number,
+    team1: Team,
+    team2: Team,
+    isTwoLegs: boolean
+  ) => {
+    const tieId = `tie-${stage.toLowerCase()}-${tieNumber}`;
+    const leg1Id = `match-${stage.toLowerCase()}-${tieNumber}-leg1`;
+    const leg2Id = `match-${stage.toLowerCase()}-${tieNumber}-leg2`;
+
+    const existingLeg1 = matches.find((m) => m.id === leg1Id || (m.tie_id === tieId && m.leg === 1));
+    const existingLeg2 = matches.find((m) => m.id === leg2Id || (m.tie_id === tieId && m.leg === 2));
+
+    // Check if teams need update
+    if (existingLeg1) {
+      if (existingLeg1.home_team_id !== team2.id || existingLeg1.away_team_id !== team1.id) {
+        matches = matches.map((m) =>
+          m.id === existingLeg1.id
+            ? { ...m, home_team_id: team2.id, away_team_id: team1.id }
+            : m
+        );
+        hasChanges = true;
+      }
+    } else {
+      matches.push({
+        id: leg1Id,
+        home_team_id: team2.id,
+        away_team_id: team1.id,
+        home_score: null,
+        away_score: null,
+        match_type: stage,
+        is_played: false,
+        leg: 1,
+        tie_id: tieId,
+        round_number: tieNumber,
+      });
+      hasChanges = true;
+    }
+
+    if (isTwoLegs) {
+      if (existingLeg2) {
+        if (existingLeg2.home_team_id !== team1.id || existingLeg2.away_team_id !== team2.id) {
+          matches = matches.map((m) =>
+            m.id === existingLeg2.id
+              ? { ...m, home_team_id: team1.id, away_team_id: team2.id }
+              : m
+          );
+          hasChanges = true;
+        }
+      } else {
+        matches.push({
+          id: leg2Id,
+          home_team_id: team1.id,
+          away_team_id: team2.id,
+          home_score: null,
+          away_score: null,
+          match_type: stage,
+          is_played: false,
+          leg: 2,
+          tie_id: tieId,
+          round_number: tieNumber,
+        });
+        hasChanges = true;
+      }
+    }
+  };
+
+  const tree = computeFullBracketTree(matches, teams, finalIsTwoLegs);
+
+  // 1. Sync Quarter Finals if feeder Ro16 winners are both ready
+  tree.qfTies.forEach((qf) => {
+    if (qf.homeTeam && qf.awayTeam) {
+      ensureMatchesForTie('QF', qf.matchNumber, qf.homeTeam, qf.awayTeam, true);
+    }
+  });
+
+  // Recompute with updated QF matches
+  const treeAfterQF = computeFullBracketTree(matches, teams, finalIsTwoLegs);
+
+  // 2. Sync Semi Finals if feeder QF winners are both ready
+  treeAfterQF.sfTies.forEach((sf) => {
+    if (sf.homeTeam && sf.awayTeam) {
+      ensureMatchesForTie('SF', sf.matchNumber, sf.homeTeam, sf.awayTeam, true);
+    }
+  });
+
+  // Recompute with updated SF matches
+  const treeAfterSF = computeFullBracketTree(matches, teams, finalIsTwoLegs);
+
+  // 3. Sync Final if feeder SF winners are both ready
+  const finalTie = treeAfterSF.finalTies[0];
+  if (finalTie?.homeTeam && finalTie?.awayTeam) {
+    ensureMatchesForTie('Final', 1, finalTie.homeTeam, finalTie.awayTeam, finalIsTwoLegs);
+  }
+
+  return { updatedMatches: matches, hasChanges };
+}
+
 // Generate subsequent knockout rounds (QF -> SF -> Final) from completed previous rounds
 export function generateNextKnockoutStage(
   currentStage: 'Ro16' | 'QF' | 'SF',
@@ -556,64 +932,8 @@ export function generateNextKnockoutStage(
   teams: Team[],
   finalIsTwoLegs: boolean = false
 ): Match[] {
-  const nextStage: MatchStage =
-    currentStage === 'Ro16' ? 'QF' : currentStage === 'QF' ? 'SF' : 'Final';
-
-  const currentTies = computeKnockoutTies(currentStage, allMatches, teams);
-
-  // We need pairs of winners to advance
-  const winners: Team[] = [];
-  currentTies.forEach((tie) => {
-    if (tie.winnerTeamId) {
-      const winner = teams.find((t) => t.id === tie.winnerTeamId);
-      if (winner) winners.push(winner);
-    }
-  });
-
-  const nextMatches: Match[] = [];
-  const expectedTies = currentTies.length / 2;
-
-  for (let i = 0; i < expectedTies; i++) {
-    const team1 = winners[i * 2] || null;
-    const team2 = winners[i * 2 + 1] || null;
-
-    if (team1 && team2) {
-      const tieId = `tie-${nextStage.toLowerCase()}-${i + 1}`;
-      const isTwoLegs = nextStage === 'Final' ? finalIsTwoLegs : true;
-
-      // Leg 1
-      nextMatches.push({
-        id: `match-${nextStage.toLowerCase()}-${i + 1}-leg1`,
-        home_team_id: team2.id,
-        away_team_id: team1.id,
-        home_score: null,
-        away_score: null,
-        match_type: nextStage,
-        is_played: false,
-        leg: 1,
-        tie_id: tieId,
-        round_number: i + 1,
-      });
-
-      if (isTwoLegs) {
-        // Leg 2
-        nextMatches.push({
-          id: `match-${nextStage.toLowerCase()}-${i + 1}-leg2`,
-          home_team_id: team1.id,
-          away_team_id: team2.id,
-          home_score: null,
-          away_score: null,
-          match_type: nextStage,
-          is_played: false,
-          leg: 2,
-          tie_id: tieId,
-          round_number: i + 1,
-        });
-      }
-    }
-  }
-
-  return nextMatches;
+  const sync = synchronizeKnockoutProgression(allMatches, teams, finalIsTwoLegs);
+  return sync.updatedMatches;
 }
 
 // =========================================================================

@@ -220,6 +220,8 @@ export async function createTournamentInSupabase(
       logo_url: t.logo_url,
       group_id: t.group_id,
       pot: t.pot || 1,
+      phone: t.whatsapp || t.phone || '',
+      whatsapp: t.whatsapp || t.phone || '',
     }));
 
     const { data: insertedTeams, error: teamsError } = await client
@@ -333,6 +335,8 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       group_id: t.group_id,
       club_crest_name: t.club_name || t.club_crest_name,
       pot: t.pot || 1,
+      whatsapp: t.whatsapp || t.phone || '',
+      phone: t.phone || t.whatsapp || '',
     }));
 
     const parsedMatches: Match[] = (matchesData || []).map((m) => ({

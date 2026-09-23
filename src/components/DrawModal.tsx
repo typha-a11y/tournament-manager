@@ -99,7 +99,8 @@ export const DrawModal: React.FC<DrawModalProps> = ({
                       <div key={tm.id} className="flex items-center gap-1.5 text-xs">
                         <ClubCrest
                           logoUrl={tm.logo_url}
-                          name={tm.club_crest_name || tm.name}
+                          clubName={tm.club_crest_name}
+                          teamName={tm.name}
                           size="xs"
                         />
                         <span className="font-semibold text-slate-800 truncate text-[11px]">

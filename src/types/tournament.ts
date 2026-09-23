@@ -29,6 +29,8 @@ export interface Team {
   group_id: GroupLetter | null;
   club_crest_name?: string;
   pot?: number;
+  whatsapp?: string;
+  phone?: string;
 }
 
 export interface Match {
@@ -75,6 +77,8 @@ export interface KnockoutTie {
   matchNumber: number;
   homeTeam: Team | null;
   awayTeam: Team | null;
+  homePlaceholder?: string;
+  awayPlaceholder?: string;
   leg1: Match | null;
   leg2: Match | null;
   aggregateHomeScore: number;

@@ -239,7 +239,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
             {/* Team A */}
             <div className="col-span-2 flex flex-col items-center text-center">
               <div className="p-1.5 bg-white/10 rounded-full mb-1.5 border border-white/20">
-                <ClubCrest logoUrl={teamA.logo_url} name={teamA.club_crest_name || teamA.name} size="lg" />
+                <ClubCrest
+                  logoUrl={teamA.logo_url}
+                  clubName={teamA.club_crest_name}
+                  teamName={teamA.name}
+                  size="lg"
+                />
               </div>
               <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate max-w-full">
                 {teamA.name}
@@ -269,7 +274,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
             {/* Team B */}
             <div className="col-span-2 flex flex-col items-center text-center">
               <div className="p-1.5 bg-white/10 rounded-full mb-1.5 border border-white/20">
-                <ClubCrest logoUrl={teamB.logo_url} name={teamB.club_crest_name || teamB.name} size="lg" />
+                <ClubCrest
+                  logoUrl={teamB.logo_url}
+                  clubName={teamB.club_crest_name}
+                  teamName={teamB.name}
+                  size="lg"
+                />
               </div>
               <h3 className="font-bold text-white text-sm sm:text-base leading-tight truncate max-w-full">
                 {teamB.name}
@@ -330,7 +340,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
                     {teamA.club_crest_name} <span className="text-blue-600 font-bold">(Home)</span>
                   </div>
                 </div>
-                <ClubCrest logoUrl={teamA.logo_url} name={teamA.club_crest_name || teamA.name} size="sm" />
+                <ClubCrest
+                  logoUrl={teamA.logo_url}
+                  clubName={teamA.club_crest_name}
+                  teamName={teamA.name}
+                  size="sm"
+                />
               </div>
 
               {/* Score inputs with +/- steppers */}
@@ -396,7 +411,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
 
               {/* Away Team (Team B) */}
               <div className="col-span-3 flex items-center gap-2.5 text-left">
-                <ClubCrest logoUrl={teamB.logo_url} name={teamB.club_crest_name || teamB.name} size="sm" />
+                <ClubCrest
+                  logoUrl={teamB.logo_url}
+                  clubName={teamB.club_crest_name}
+                  teamName={teamB.name}
+                  size="sm"
+                />
                 <div>
                   <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
                     {teamB.name}
@@ -446,7 +466,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
                       {teamB.club_crest_name} <span className="text-indigo-600 font-bold">(Home)</span>
                     </div>
                   </div>
-                  <ClubCrest logoUrl={teamB.logo_url} name={teamB.club_crest_name || teamB.name} size="sm" />
+                  <ClubCrest
+                    logoUrl={teamB.logo_url}
+                    clubName={teamB.club_crest_name}
+                    teamName={teamB.name}
+                    size="sm"
+                  />
                 </div>
 
                 {/* Score inputs */}
@@ -512,7 +537,12 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
 
                 {/* Away Team (Team A in reverse leg) */}
                 <div className="col-span-3 flex items-center gap-2.5 text-left">
-                  <ClubCrest logoUrl={teamA.logo_url} name={teamA.club_crest_name || teamA.name} size="sm" />
+                  <ClubCrest
+                    logoUrl={teamA.logo_url}
+                    clubName={teamA.club_crest_name}
+                    teamName={teamA.name}
+                    size="sm"
+                  />
                   <div>
                     <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
                       {teamA.name}

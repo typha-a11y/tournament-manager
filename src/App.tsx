@@ -74,7 +74,7 @@ function TournamentAppInner() {
       />
 
       {/* Main Viewport Container */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6">
+      <main className="flex-1 w-full max-w-[1800px] 2xl:max-w-[2200px] mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 sm:py-6">
         {currentTab === 'groups' && (
           <GroupStandingsView
             teams={teams}
@@ -145,7 +145,7 @@ function TournamentAppInner() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-12">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        <div className="max-w-[1800px] 2xl:max-w-[2200px] mx-auto px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div>
             <span className="font-semibold text-slate-800">
               eFootball Tournament Manager
