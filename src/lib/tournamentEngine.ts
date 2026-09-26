@@ -137,6 +137,69 @@ function calculateHeadToHeadPoints(teamAId: string, teamBId: string, groupMatche
   return aPoints - bPoints;
 }
 
+// Known mapping from DB UUIDs to normalized player names to reliably resolve legacy or database UUIDs
+const KNOWN_DB_UUID_TO_NAME: Record<string, string> = {
+  'd130d67d-26cb-4c72-bd99-b9cf46eb2872': 'huncho',
+  '3f3b6fdd-e05f-41ce-8a78-d00b1863f0fc': 'she cheated me',
+  '197ed132-1db7-483a-968e-490411b9e297': 'elly hunter',
+  '2b3b00e0-c671-411b-8c60-4a54b978739b': 'christian',
+  'd9cb1e1a-cf30-4c17-babf-762afa424a35': 'g.o.a.t',
+  'a640a683-3fcf-44e5-b6ea-ddfddaf10d8b': 'ice_emaestro',
+  '06ede237-2635-4497-b41b-56ed39db969d': 'benin',
+  '173ac006-550b-4af3-8456-7e7d3ba573db': 'jazzynorman',
+  '86cd0421-f7e9-497c-aaa6-bd948317c9cc': 'kj warriors',
+  '39c75728-bb04-4cbd-a37c-55b0e0a746f9': 'nenga',
+  'e9731f0f-17cf-40df-a9bf-e29e89f28870': 'roger muncaster',
+  '4f88e038-3f9d-4cef-83a6-c94df120c4a7': 'mshana ai',
+  '7efc15bc-4c40-4883-b1a5-b89a494a6c81': 'betwery',
+  '95e955a4-0adc-4022-9041-781791986b07': 'youngking',
+  '86a36097-348b-4cea-9dce-538e66f966c5': 'dedgurury',
+  'dea79436-afc4-44e9-a712-2c1a0a30601a': 'wise meek',
+  '2cc4e45d-c12e-4337-bb65-24fcd835bc8c': 'budo',
+  '236787b7-3462-40c4-8637-e34b1cc153c2': 'ivory coast',
+  'df3c8a11-ef25-4631-a136-7504a9c75c96': 'muhyuzoh',
+  '0be7dbf5-2c27-47f9-8545-8f921129a8dd': '45balo',
+  '56e53b60-94c9-4c6e-8f5a-c504bbdba159': 'man of people',
+  '21ca7d72-5caf-4314-8c66-2622fe69d822': 'kachuma',
+  'c9eb9f44-f398-42dc-aa5c-aa3ce0116a75': 'drexypal64',
+  '8129a317-e09c-41f0-bdc8-7d4884cc7d34': 'moyo',
+};
+
+// Helper to resolve any team ID, UUID, team-X, name, or club to a canonical Team object
+function resolveTeamFromIdentifier(idOrName: string | undefined, teams: Team[]): Team | undefined {
+  if (!idOrName) return undefined;
+  const clean = idOrName.toLowerCase().trim();
+
+  // 1. Direct match on team.id
+  let found = teams.find((t) => t.id === idOrName);
+  if (found) return found;
+
+  // 2. Direct match on team.name
+  found = teams.find((t) => t.name.toLowerCase().trim() === clean);
+  if (found) return found;
+
+  // 3. Known DB UUID mapping
+  if (KNOWN_DB_UUID_TO_NAME[clean]) {
+    const targetName = KNOWN_DB_UUID_TO_NAME[clean];
+    found = teams.find((t) => t.name.toLowerCase().trim() === targetName);
+    if (found) return found;
+  }
+
+  // 4. team-X fallback if index-based
+  if (clean.startsWith('team-')) {
+    const idx = parseInt(clean.replace('team-', ''), 10) - 1;
+    if (!isNaN(idx) && idx >= 0 && idx < teams.length) {
+      return teams[idx];
+    }
+  }
+
+  // 5. Club crest name match fallback
+  found = teams.find((t) => (t.club_crest_name || '').toLowerCase().trim() === clean);
+  if (found) return found;
+
+  return undefined;
+}
+
 // Sanitize, harmonize, and deduplicate match fixtures ensuring exactly 72 clean double round-robin group matches + clean knockouts
 export function sanitizeAndDeduplicateMatches(
   rawMatches: Match[],
@@ -144,43 +207,47 @@ export function sanitizeAndDeduplicateMatches(
 ): Match[] {
   if (!teams || teams.length === 0) return rawMatches || [];
 
-  // Generate clean 72 group matches template based on the current 24 teams
+  // Generate clean 72 group matches template based on current teams
   const cleanGroupTemplate = generateIntraGroupFixtures(teams);
 
-  // Map to store the best played/recorded match data for each pairing
-  const existingScores = new Map<string, Match>();
+  interface CapturedScore {
+    match: Match;
+    reversed: boolean;
+  }
+  const existingScores = new Map<string, CapturedScore>();
 
   if (Array.isArray(rawMatches)) {
     rawMatches.forEach((m) => {
-      const homeTeam = teams.find(
-        (t) =>
-          t.id === m.home_team_id ||
-          (m.home_team_id && t.name.toLowerCase().trim() === m.home_team_id.toLowerCase().trim())
-      );
-      const awayTeam = teams.find(
-        (t) =>
-          t.id === m.away_team_id ||
-          (m.away_team_id && t.name.toLowerCase().trim() === m.away_team_id.toLowerCase().trim())
-      );
+      const homeTeam = resolveTeamFromIdentifier(m.home_team_id, teams);
+      const awayTeam = resolveTeamFromIdentifier(m.away_team_id, teams);
 
       if (homeTeam && awayTeam && (m.match_type === 'Group' || !m.match_type)) {
         const homeName = homeTeam.name.toLowerCase().trim();
         const awayName = awayTeam.name.toLowerCase().trim();
         const leg = m.leg || 1;
 
-        const key = `${homeName}_${awayName}_leg${leg}`;
-        const currentBest = existingScores.get(key);
+        const forwardKey = `${homeName}__${awayName}__leg${leg}`;
+        const reverseKey = `${awayName}__${homeName}__leg${leg}`;
 
-        if (
-          !currentBest ||
-          (!currentBest.is_played && m.is_played) ||
-          (m.home_score !== null && currentBest.home_score === null)
-        ) {
-          existingScores.set(key, m);
+        const isBetter = (existing?: CapturedScore) => {
+          if (!existing) return true;
+          if (!existing.match.is_played && m.is_played) return true;
+          if (m.home_score !== null && existing.match.home_score === null) return true;
+          return false;
+        };
+
+        if (isBetter(existingScores.get(forwardKey))) {
+          existingScores.set(forwardKey, { match: m, reversed: false });
+        }
+        if (isBetter(existingScores.get(reverseKey))) {
+          existingScores.set(reverseKey, { match: m, reversed: true });
         }
 
         if (m.id) {
-          existingScores.set(`id_${m.id}`, m);
+          existingScores.set(`id_${m.id}`, { match: m, reversed: false });
+        }
+        if (m.tie_id) {
+          existingScores.set(`tie_${m.tie_id}__leg${leg}`, { match: m, reversed: false });
         }
       }
     });
@@ -188,30 +255,33 @@ export function sanitizeAndDeduplicateMatches(
 
   // Merge recorded scores into the clean 72 group matches
   const finalizedGroupMatches = cleanGroupTemplate.map((templateMatch) => {
-    const homeTeam = teams.find((t) => t.id === templateMatch.home_team_id);
-    const awayTeam = teams.find((t) => t.id === templateMatch.away_team_id);
+    const homeTeam = resolveTeamFromIdentifier(templateMatch.home_team_id, teams);
+    const awayTeam = resolveTeamFromIdentifier(templateMatch.away_team_id, teams);
 
     if (homeTeam && awayTeam) {
       const homeName = homeTeam.name.toLowerCase().trim();
       const awayName = awayTeam.name.toLowerCase().trim();
       const leg = templateMatch.leg || 1;
 
-      const recorded =
-        existingScores.get(`${homeName}_${awayName}_leg${leg}`) ||
-        existingScores.get(`${homeName}_${awayName}_leg1`) ||
-        existingScores.get(`id_${templateMatch.id}`);
+      const captured =
+        existingScores.get(`${homeName}__${awayName}__leg${leg}`) ||
+        (templateMatch.tie_id ? existingScores.get(`tie_${templateMatch.tie_id}__leg${leg}`) : undefined) ||
+        existingScores.get(`id_${templateMatch.id}`) ||
+        existingScores.get(`${awayName}__${homeName}__leg${leg}`);
 
-      if (recorded && (recorded.is_played || recorded.home_score !== null)) {
+      if (captured && (captured.match.is_played || captured.match.home_score !== null)) {
+        const hScore = captured.reversed ? captured.match.away_score : captured.match.home_score;
+        const aScore = captured.reversed ? captured.match.home_score : captured.match.away_score;
+        const played = captured.match.is_played ?? (hScore !== null && aScore !== null);
+
         return {
           ...templateMatch,
-          id: recorded.id && !recorded.id.startsWith('tie-') ? recorded.id : templateMatch.id,
-          home_score: recorded.home_score,
-          away_score: recorded.away_score,
-          is_played:
-            recorded.is_played ??
-            (recorded.home_score !== null && recorded.away_score !== null),
-          home_penalties: recorded.home_penalties,
-          away_penalties: recorded.away_penalties,
+          id: captured.match.id && !captured.match.id.startsWith('tie-') ? captured.match.id : templateMatch.id,
+          home_score: hScore,
+          away_score: aScore,
+          is_played: played,
+          home_penalties: captured.reversed ? captured.match.away_penalties : captured.match.home_penalties,
+          away_penalties: captured.reversed ? captured.match.home_penalties : captured.match.away_penalties,
         };
       }
     }
@@ -285,39 +355,16 @@ export function calculateGroupStandings(
     let homeId = m.home_team_id;
     let awayId = m.away_team_id;
 
-    // Resolve home ID if it's stored as name or UUID
-    if (!statsMap[homeId]) {
-      const found = groupTeams.find(
-        (t) =>
-          t.id === m.home_team_id ||
-          (m.home_team_id && t.name.toLowerCase().trim() === m.home_team_id.toLowerCase().trim())
-      );
-      if (found) {
-        homeId = found.id;
-      } else {
-        const globalFound = teams.find((t) => t.id === m.home_team_id);
-        if (globalFound && nameToIdMap[globalFound.name.toLowerCase().trim()]) {
-          homeId = nameToIdMap[globalFound.name.toLowerCase().trim()];
-        }
-      }
-    }
+    // Resolve home and away teams using comprehensive team identifier resolver
+    const resolvedHome =
+      resolveTeamFromIdentifier(m.home_team_id, groupTeams) ||
+      resolveTeamFromIdentifier(m.home_team_id, teams);
+    const resolvedAway =
+      resolveTeamFromIdentifier(m.away_team_id, groupTeams) ||
+      resolveTeamFromIdentifier(m.away_team_id, teams);
 
-    // Resolve away ID if it's stored as name or UUID
-    if (!statsMap[awayId]) {
-      const found = groupTeams.find(
-        (t) =>
-          t.id === m.away_team_id ||
-          (m.away_team_id && t.name.toLowerCase().trim() === m.away_team_id.toLowerCase().trim())
-      );
-      if (found) {
-        awayId = found.id;
-      } else {
-        const globalFound = teams.find((t) => t.id === m.away_team_id);
-        if (globalFound && nameToIdMap[globalFound.name.toLowerCase().trim()]) {
-          awayId = nameToIdMap[globalFound.name.toLowerCase().trim()];
-        }
-      }
-    }
+    if (resolvedHome) homeId = resolvedHome.id;
+    if (resolvedAway) awayId = resolvedAway.id;
 
     const home = statsMap[homeId];
     const away = statsMap[awayId];

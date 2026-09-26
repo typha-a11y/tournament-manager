@@ -9,8 +9,8 @@ const LOCAL_STORAGE_URL_KEY = 'efootball_supabase_url';
 const LOCAL_STORAGE_ANON_KEY = 'efootball_supabase_anon_key';
 
 export function getStoredCredentials(): { url: string; anonKey: string } {
-  const envUrl = (import.meta.env.VITE_SUPABASE_URL as string) || '';
-  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL as string) || '';
+  const envKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY as string) || '';
 
   const storedUrl = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_URL_KEY) || '' : '';
   const storedKey = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_ANON_KEY) || '' : '';
@@ -293,6 +293,37 @@ export async function deleteTournamentFromSupabase(tournamentId: string): Promis
   }
 }
 
+export const OFFICIAL_TEAM_NAME_TO_DB_UUID: Record<string, string> = {
+  'huncho': 'd130d67d-26cb-4c72-bd99-b9cf46eb2872',
+  'she cheated me': '3f3b6fdd-e05f-41ce-8a78-d00b1863f0fc',
+  'elly hunter': '197ed132-1db7-483a-968e-490411b9e297',
+  'christian': '2b3b00e0-c671-411b-8c60-4a54b978739b',
+  'g.o.a.t': 'd9cb1e1a-cf30-4c17-babf-762afa424a35',
+  'ice_emaestro': 'a640a683-3fcf-44e5-b6ea-ddfddaf10d8b',
+  'benin': '06ede237-2635-4497-b41b-56ed39db969d',
+  'jazzynorman': '173ac006-550b-4af3-8456-7e7d3ba573db',
+  'kj warriors': '86cd0421-f7e9-497c-aaa6-bd948317c9cc',
+  'nenga': '39c75728-bb04-4cbd-a37c-55b0e0a746f9',
+  'roger muncaster': 'e9731f0f-17cf-40df-a9bf-e29e89f28870',
+  'mshana ai': '4f88e038-3f9d-4cef-83a6-c94df120c4a7',
+  'betwery': '7efc15bc-4c40-4883-b1a5-b89a494a6c81',
+  'youngking': '95e955a4-0adc-4022-9041-781791986b07',
+  'dedgurury': '86a36097-348b-4cea-9dce-538e66f966c5',
+  'wise meek': 'dea79436-afc4-44e9-a712-2c1a0a30601a',
+  'budo': '2cc4e45d-c12e-4337-bb65-24fcd835bc8c',
+  'ivory coast': '236787b7-3462-40c4-8637-e34b1cc153c2',
+  'muhyuzoh': 'df3c8a11-ef25-4631-a136-7504a9c75c96',
+  '45balo': '0be7dbf5-2c27-47f9-8545-8f921129a8dd',
+  'man of people': '56e53b60-94c9-4c6e-8f5a-c504bbdba159',
+  'kachuma': '21ca7d72-5caf-4314-8c66-2622fe69d822',
+  'drexypal64': 'c9eb9f44-f398-42dc-aa5c-aa3ce0116a75',
+  'moyo': '8129a317-e09c-41f0-bdc8-7d4884cc7d34',
+};
+
+export const KNOWN_DB_UUID_TO_NAME: Record<string, string> = Object.fromEntries(
+  Object.entries(OFFICIAL_TEAM_NAME_TO_DB_UUID).map(([name, uuid]) => [uuid, name])
+);
+
 // Fetch teams and matches for a specific tournament ID
 export async function fetchTournamentDataFromSupabase(tournamentId: string): Promise<{
   success: boolean;
@@ -306,45 +337,33 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
   }
 
   try {
+    // 1. Fetch latest teams for this tournament
     const { data: teamsData, error: tErr } = await client
       .from('teams')
       .select('*')
       .eq('tournament_id', tournamentId)
-      .order('group_id', { ascending: true })
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (tErr) {
       return { success: false, message: tErr.message };
     }
 
-    const { data: matchesData, error: mErr } = await client
-      .from('matches')
-      .select('*')
-      .eq('tournament_id', tournamentId)
-      .order('round_number', { ascending: true });
-
-    if (mErr) {
-      return { success: false, message: mErr.message };
-    }
-
     let finalTeamsData = teamsData || [];
-    let finalMatchesData = matchesData || [];
-
-    // Fallback if no teams found for tournamentId, check if any teams exist in DB
-    if (finalTeamsData.length === 0) {
-      const { data: allTeams } = await client
-        .from('teams')
-        .select('*')
-        .order('group_id', { ascending: true });
-      if (allTeams && allTeams.length > 0) {
-        finalTeamsData = allTeams;
-      }
-    }
 
     // Deduplicate teams strictly by name to prevent multiple duplicate rows
     const uniqueTeamMap = new Map<string, any>();
+    const dbIdToName = new Map<string, string>();
+
+    // Seed dbIdToName with known official UUIDs
+    Object.entries(KNOWN_DB_UUID_TO_NAME).forEach(([uuid, name]) => {
+      dbIdToName.set(uuid, name);
+    });
+
     finalTeamsData.forEach((t) => {
       const cleanName = (t.name || '').trim().toLowerCase();
+      if (t.id && cleanName) {
+        dbIdToName.set(t.id, cleanName);
+      }
       if (cleanName && !uniqueTeamMap.has(cleanName)) {
         uniqueTeamMap.set(cleanName, t);
       }
@@ -352,15 +371,19 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
 
     const deduplicatedTeams = Array.from(uniqueTeamMap.values());
 
-    if (finalMatchesData.length === 0) {
-      const { data: allMatches } = await client
-        .from('matches')
-        .select('*')
-        .order('round_number', { ascending: true });
-      if (allMatches && allMatches.length > 0) {
-        finalMatchesData = allMatches;
-      }
+    // 2. Fetch matches strictly scoped to this tournament
+    const { data: matchesData, error: mErr } = await client
+      .from('matches')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('round_number', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (mErr) {
+      return { success: false, message: mErr.message };
     }
+
+    const finalMatchesData = matchesData || [];
 
     const parsedTeams: Team[] = deduplicatedTeams.map((t, idx) => ({
       id: t.id || `team-${idx + 1}`,
@@ -374,22 +397,42 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       phone: t.phone || t.whatsapp || '',
     }));
 
-    const parsedMatches: Match[] = finalMatchesData.map((m) => ({
-      id: m.id,
-      tournament_id: m.tournament_id || tournamentId,
-      home_team_id: m.home_team_id,
-      away_team_id: m.away_team_id,
-      home_score: m.home_score,
-      away_score: m.away_score,
-      match_type: m.match_type,
-      is_played: m.is_played,
-      group_id: m.group_id,
-      leg: m.leg || 1,
-      tie_id: m.tie_id,
-      home_penalties: m.home_penalties,
-      away_penalties: m.away_penalties,
-      round_number: m.round_number,
-    }));
+    // Map canonical team name -> canonical team ID
+    const nameToCanonicalId = new Map<string, string>();
+    parsedTeams.forEach((t) => {
+      nameToCanonicalId.set(t.name.trim().toLowerCase(), t.id);
+    });
+
+    const parsedMatches: Match[] = finalMatchesData.map((m) => {
+      // Resolve home_team_id and away_team_id:
+      // If the match stored an old DB team UUID, resolve to its team name, then to the canonical team ID
+      const homeName = dbIdToName.get(m.home_team_id);
+      const awayName = dbIdToName.get(m.away_team_id);
+
+      const resolvedHomeId = homeName
+        ? nameToCanonicalId.get(homeName) || m.home_team_id
+        : m.home_team_id;
+      const resolvedAwayId = awayName
+        ? nameToCanonicalId.get(awayName) || m.away_team_id
+        : m.away_team_id;
+
+      return {
+        id: m.id,
+        tournament_id: m.tournament_id || tournamentId,
+        home_team_id: resolvedHomeId,
+        away_team_id: resolvedAwayId,
+        home_score: m.home_score,
+        away_score: m.away_score,
+        match_type: m.match_type,
+        is_played: m.is_played,
+        group_id: m.group_id,
+        leg: m.leg || 1,
+        tie_id: m.tie_id,
+        home_penalties: m.home_penalties,
+        away_penalties: m.away_penalties,
+        round_number: m.round_number,
+      };
+    });
 
     return { success: true, teams: parsedTeams, matches: parsedMatches };
   } catch (err: unknown) {
@@ -406,29 +449,50 @@ export async function updateTournamentTeamsInSupabase(
   if (!client) return { success: false, message: 'Supabase client is not configured' };
 
   try {
-    const teamsPayload = teams.map((t) => ({
-      id: t.id && !t.id.startsWith('team-') ? t.id : undefined,
-      tournament_id: tournamentId || t.tournament_id,
-      name: t.name,
-      club_name: t.club_crest_name || t.name,
-      club_crest_name: t.club_crest_name || t.name,
-      logo_url: t.logo_url,
-      group_id: t.group_id,
-      pot: t.pot || 1,
-      phone: t.whatsapp || t.phone || '',
-      whatsapp: t.whatsapp || t.phone || '',
-    }));
+    const tourneyId = tournamentId || teams[0]?.tournament_id;
+
+    // Check existing teams in DB to preserve UUIDs and prevent duplicate row explosion
+    const { data: existing } = await client
+      .from('teams')
+      .select('id, name')
+      .eq('tournament_id', tourneyId)
+      .order('created_at', { ascending: false });
+
+    const nameToExistingId = new Map<string, string>();
+    existing?.forEach((t) => {
+      const n = (t.name || '').trim().toLowerCase();
+      if (!nameToExistingId.has(n)) nameToExistingId.set(n, t.id);
+    });
+
+    const teamsPayload = teams.map((t) => {
+      const norm = (t.name || '').trim().toLowerCase();
+      const existingId =
+        nameToExistingId.get(norm) || (t.id && !t.id.startsWith('team-') ? t.id : undefined);
+
+      return {
+        id: existingId,
+        tournament_id: tourneyId || t.tournament_id,
+        name: t.name,
+        club_name: t.club_crest_name || t.name,
+        club_crest_name: t.club_crest_name || t.name,
+        logo_url: t.logo_url,
+        group_id: t.group_id,
+        pot: t.pot || 1,
+        phone: t.whatsapp || t.phone || '',
+        whatsapp: t.whatsapp || t.phone || '',
+      };
+    });
 
     const { error } = await client.from('teams').upsert(teamsPayload);
     if (error) {
       return { success: false, message: error.message };
     }
 
-    if (tournamentId) {
+    if (tourneyId) {
       await client
         .from('tournaments')
         .update({ last_saved_at: new Date().toISOString() })
-        .eq('id', tournamentId);
+        .eq('id', tourneyId);
     }
 
     return { success: true, message: 'Teams updated and synced successfully' };
@@ -451,13 +515,17 @@ async function resolveSupabaseTeamMap(
     const { data: dbTeams } = await client
       .from('teams')
       .select('id, name')
-      .eq('tournament_id', tournamentId);
+      .eq('tournament_id', tournamentId)
+      .order('created_at', { ascending: false });
 
     if (dbTeams && dbTeams.length > 0) {
       // Map name -> dbId
       const nameToDbId = new Map<string, string>();
       dbTeams.forEach((dt: any) => {
-        if (dt.name) nameToDbId.set(dt.name.toLowerCase().trim(), dt.id);
+        const norm = (dt.name || '').toLowerCase().trim();
+        if (norm && !nameToDbId.has(norm)) {
+          nameToDbId.set(norm, dt.id);
+        }
         map.set(dt.id, dt.id);
       });
 
@@ -499,9 +567,29 @@ export async function saveTournamentMatchScoreToSupabase(
       if (teamMap.has(match.away_team_id)) {
         dbAwayId = teamMap.get(match.away_team_id)!;
       }
+
+      // Fallback: If not UUID, resolve using clientTeams names and official dictionary
+      const isUuidFormat = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+      if (!isUuidFormat(dbHomeId)) {
+        const teamObj = clientTeams?.find((t) => t.id === match.home_team_id);
+        const nameNorm = (teamObj ? teamObj.name : dbHomeId).toLowerCase().trim();
+        if (OFFICIAL_TEAM_NAME_TO_DB_UUID[nameNorm]) {
+          dbHomeId = OFFICIAL_TEAM_NAME_TO_DB_UUID[nameNorm];
+        }
+      }
+
+      if (!isUuidFormat(dbAwayId)) {
+        const teamObj = clientTeams?.find((t) => t.id === match.away_team_id);
+        const nameNorm = (teamObj ? teamObj.name : dbAwayId).toLowerCase().trim();
+        if (OFFICIAL_TEAM_NAME_TO_DB_UUID[nameNorm]) {
+          dbAwayId = OFFICIAL_TEAM_NAME_TO_DB_UUID[nameNorm];
+        }
+      }
     }
 
-    const payload = {
+    let payload = {
       home_score: match.home_score,
       away_score: match.away_score,
       is_played: match.is_played,
@@ -510,17 +598,16 @@ export async function saveTournamentMatchScoreToSupabase(
     };
 
     let existingMatchId: string | null = null;
+    let isReversedInDb = false;
     const isUuid =
       match.id &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(match.id);
 
-    if (isUuid) {
-      existingMatchId = match.id;
-    } else if (tourneyId) {
-      // Look up by tournament and team IDs
+    // 1. Look up existing match row by tournament and team IDs + leg (direct pairing)
+    if (tourneyId && dbHomeId && dbAwayId) {
       const { data: found } = await client
         .from('matches')
-        .select('id')
+        .select('id, home_team_id, away_team_id')
         .eq('tournament_id', tourneyId)
         .eq('home_team_id', dbHomeId)
         .eq('away_team_id', dbAwayId)
@@ -530,26 +617,65 @@ export async function saveTournamentMatchScoreToSupabase(
       if (found && found.length > 0) {
         existingMatchId = found[0].id;
       } else {
-        // Fallback check by matching original client home_team_id
-        const { data: foundOriginal } = await client
+        // Reverse pairing check
+        const { data: foundReverse } = await client
           .from('matches')
-          .select('id')
+          .select('id, home_team_id, away_team_id')
           .eq('tournament_id', tourneyId)
-          .eq('home_team_id', match.home_team_id)
-          .eq('away_team_id', match.away_team_id)
+          .eq('home_team_id', dbAwayId)
+          .eq('away_team_id', dbHomeId)
           .eq('leg', match.leg || 1)
           .limit(1);
 
-        if (foundOriginal && foundOriginal.length > 0) {
-          existingMatchId = foundOriginal[0].id;
+        if (foundReverse && foundReverse.length > 0) {
+          existingMatchId = foundReverse[0].id;
+          isReversedInDb = true;
+        } else if (match.tie_id) {
+          // Check by tie_id and leg
+          const { data: foundTie } = await client
+            .from('matches')
+            .select('id, home_team_id, away_team_id')
+            .eq('tournament_id', tourneyId)
+            .eq('tie_id', match.tie_id)
+            .eq('leg', match.leg || 1)
+            .limit(1);
+
+          if (foundTie && foundTie.length > 0) {
+            existingMatchId = foundTie[0].id;
+            if (foundTie[0].home_team_id === dbAwayId) {
+              isReversedInDb = true;
+            }
+          }
         }
       }
     }
 
+    // 2. If not found by team IDs, check by exact ID if UUID
+    if (!existingMatchId && isUuid) {
+      const { data: foundById } = await client
+        .from('matches')
+        .select('id')
+        .eq('id', match.id)
+        .limit(1);
+      if (foundById && foundById.length > 0) {
+        existingMatchId = foundById[0].id;
+      }
+    }
+
     if (existingMatchId) {
+      const effectivePayload = isReversedInDb
+        ? {
+            ...payload,
+            home_score: match.away_score,
+            away_score: match.home_score,
+            home_penalties: match.away_penalties ?? null,
+            away_penalties: match.home_penalties ?? null,
+          }
+        : payload;
+
       const { error: updateErr } = await client
         .from('matches')
-        .update(payload)
+        .update(effectivePayload)
         .eq('id', existingMatchId);
 
       if (updateErr) {
@@ -615,7 +741,9 @@ export async function saveTournamentTieScoresToSupabase(
     // 1. Update Leg 1
     const p1 = saveTournamentMatchScoreToSupabase(leg1, tournamentId, clientTeams);
     // 2. Update Leg 2 (if present)
-    const p2 = leg2 ? saveTournamentMatchScoreToSupabase(leg2, tournamentId, clientTeams) : Promise.resolve({ success: true, message: '' });
+    const p2 = leg2
+      ? saveTournamentMatchScoreToSupabase(leg2, tournamentId, clientTeams)
+      : Promise.resolve({ success: true, message: '' });
 
     const [r1, r2] = await Promise.all([p1, p2]);
 
@@ -659,8 +787,7 @@ export async function fetchTeamsFromSupabase(
       .from('teams')
       .select('*')
       .eq('tournament_id', tournamentId)
-      .order('group_id', { ascending: true })
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (error) {
       return { success: false, message: error.message };
@@ -670,7 +797,13 @@ export async function fetchTeamsFromSupabase(
       return { success: false, message: 'No teams found for this tournament profile in Supabase' };
     }
 
-    const parsedTeams: Team[] = data.map((t) => ({
+    const uniqueMap = new Map<string, any>();
+    data.forEach((t) => {
+      const n = (t.name || '').trim().toLowerCase();
+      if (n && !uniqueMap.has(n)) uniqueMap.set(n, t);
+    });
+
+    const parsedTeams: Team[] = Array.from(uniqueMap.values()).map((t) => ({
       id: t.id,
       tournament_id: t.tournament_id,
       name: t.name,
@@ -678,6 +811,8 @@ export async function fetchTeamsFromSupabase(
       group_id: t.group_id,
       club_crest_name: t.club_name || t.club_crest_name,
       pot: t.pot || 1,
+      whatsapp: t.whatsapp || t.phone || '',
+      phone: t.phone || t.whatsapp || '',
     }));
 
     return { success: true, data: parsedTeams };
@@ -750,36 +885,57 @@ export async function pushDataToSupabase(
   }
 
   try {
+    const tourneyId = tournamentId || teams[0]?.tournament_id;
+
+    // Check existing teams in DB for this tournament to preserve UUIDs
+    const { data: existing } = await client
+      .from('teams')
+      .select('id, name')
+      .eq('tournament_id', tourneyId)
+      .order('created_at', { ascending: false });
+
+    const nameToExistingId = new Map<string, string>();
+    existing?.forEach((t) => {
+      const n = (t.name || '').trim().toLowerCase();
+      if (!nameToExistingId.has(n)) nameToExistingId.set(n, t.id);
+    });
+
     // 1. Prepare teams payloads
-    const teamsPayload = teams.map((t) => ({
-      name: t.name,
-      logo_url: t.logo_url,
-      group_id: t.group_id,
-      club_crest_name: t.club_crest_name || null,
-      tournament_id: tournamentId || t.tournament_id,
-      pot: t.pot || 1,
-    }));
+    const teamsPayload = teams.map((t) => {
+      const norm = (t.name || '').trim().toLowerCase();
+      const existingId =
+        nameToExistingId.get(norm) || (t.id && !t.id.startsWith('team-') ? t.id : undefined);
+
+      return {
+        id: existingId,
+        name: t.name,
+        club_name: t.club_crest_name || t.name,
+        club_crest_name: t.club_crest_name || t.name,
+        logo_url: t.logo_url,
+        group_id: t.group_id,
+        tournament_id: tourneyId,
+        pot: t.pot || 1,
+        phone: t.whatsapp || t.phone || '',
+        whatsapp: t.whatsapp || t.phone || '',
+      };
+    });
 
     const { data: upsertedTeams, error: teamsError } = await client
       .from('teams')
-      .upsert(teamsPayload, { onConflict: 'name,tournament_id' })
+      .upsert(teamsPayload)
       .select('id, name');
 
     if (teamsError) {
-      // Fallback simple upsert if constraint differs
-      const { data: fallbackUpsert, error: fbErr } = await client
-        .from('teams')
-        .upsert(teamsPayload)
-        .select('id, name');
-      if (fbErr) {
-        return { success: false, message: `Teams sync failed: ${fbErr.message}` };
-      }
+      console.warn('Teams upsert warning:', teamsError.message);
     }
 
     // Build map of team name -> DB UUID
     const teamNameToId = new Map<string, string>();
+    // First from pre-existing
+    nameToExistingId.forEach((id, name) => teamNameToId.set(name, id));
+    // Then overlay newly upserted
     if (upsertedTeams) {
-      upsertedTeams.forEach((t) => teamNameToId.set(t.name, t.id));
+      upsertedTeams.forEach((t) => teamNameToId.set((t.name || '').trim().toLowerCase(), t.id));
     }
 
     // 2. Prepare matches payload with real DB team UUIDs
@@ -788,8 +944,11 @@ export async function pushDataToSupabase(
         const homeTeamObj = teams.find((t) => t.id === m.home_team_id);
         const awayTeamObj = teams.find((t) => t.id === m.away_team_id);
 
-        const homeDbId = homeTeamObj ? teamNameToId.get(homeTeamObj.name) || homeTeamObj.id : m.home_team_id;
-        const awayDbId = awayTeamObj ? teamNameToId.get(awayTeamObj.name) || awayTeamObj.id : m.away_team_id;
+        const homeName = (homeTeamObj ? homeTeamObj.name : m.home_team_id || '').trim().toLowerCase();
+        const awayName = (awayTeamObj ? awayTeamObj.name : m.away_team_id || '').trim().toLowerCase();
+
+        const homeDbId = teamNameToId.get(homeName) || m.home_team_id;
+        const awayDbId = teamNameToId.get(awayName) || m.away_team_id;
 
         // Skip if either team couldn't be resolved or are identical
         if (!homeDbId || !awayDbId || homeDbId === awayDbId) {
@@ -797,7 +956,7 @@ export async function pushDataToSupabase(
         }
 
         return {
-          tournament_id: tournamentId || m.tournament_id,
+          tournament_id: tourneyId || m.tournament_id,
           home_team_id: homeDbId,
           away_team_id: awayDbId,
           home_score: m.home_score,
@@ -814,17 +973,14 @@ export async function pushDataToSupabase(
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
 
-    if (matchesPayload.length > 0) {
-      if (tournamentId) {
-        await client.from('matches').delete().eq('tournament_id', tournamentId);
-      }
-      const { error: matchesError } = await client.from('matches').insert(matchesPayload);
+    if (matchesPayload.length > 0 && tourneyId) {
+      // Upsert or insert matches
+      const { error: matchesError } = await client.from('matches').upsert(matchesPayload);
 
       if (matchesError) {
-        return {
-          success: true,
-          message: `Teams synced successfully! However, matches had a notice: ${matchesError.message}`,
-        };
+        // Fallback: delete unplayed and insert
+        await client.from('matches').delete().eq('tournament_id', tourneyId).eq('is_played', false);
+        await client.from('matches').insert(matchesPayload.filter((m) => !m.is_played));
       }
     }
 

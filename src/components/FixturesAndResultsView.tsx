@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { Match, Team, GroupLetter } from '../types/tournament';
 import { ClubCrest } from './ClubCrest';
 import { useTournament } from '../context/TournamentContext';
+import { KNOWN_DB_UUID_TO_NAME } from '../lib/supabaseClient';
 import {
   Calendar,
   Check,
@@ -83,9 +84,12 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
     if (!teamIdOrName || !targetTeam) return false;
     if (teamIdOrName === targetTeam.id) return true;
     const norm = (s: string) => s.toLowerCase().trim();
-    if (norm(teamIdOrName) === norm(targetTeam.name)) return true;
+    const clean = norm(teamIdOrName);
+    const targetNorm = norm(targetTeam.name);
+    if (clean === targetNorm) return true;
+    if (KNOWN_DB_UUID_TO_NAME[clean] && KNOWN_DB_UUID_TO_NAME[clean] === targetNorm) return true;
     const found = teams.find((t) => t.id === teamIdOrName);
-    return found ? norm(found.name) === norm(targetTeam.name) : false;
+    return found ? norm(found.name) === targetNorm : false;
   };
 
   // Compute all double-leg group ties
