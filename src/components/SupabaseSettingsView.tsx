@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Terminal,
   Wrench,
+  X,
 } from 'lucide-react';
 
 interface SupabaseSettingsViewProps {
@@ -35,6 +36,7 @@ interface SupabaseSettingsViewProps {
   isSupabaseConnected: boolean;
   onConnectionChange: (connected: boolean) => void;
   onDataLoaded?: (teams: Team[], matches: Match[]) => void;
+  onClose?: () => void;
 }
 
 export const SupabaseSettingsView: React.FC<SupabaseSettingsViewProps> = ({
@@ -43,6 +45,7 @@ export const SupabaseSettingsView: React.FC<SupabaseSettingsViewProps> = ({
   isSupabaseConnected,
   onConnectionChange,
   onDataLoaded,
+  onClose,
 }) => {
   const { activeTournamentId, resetToOfficialRoster } = useTournament();
   const initialCreds = getStoredCredentials();
@@ -183,6 +186,17 @@ export const SupabaseSettingsView: React.FC<SupabaseSettingsViewProps> = ({
               <span>Open Supabase Dashboard</span>
               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
             </a>
+
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition-colors shadow-2xs"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Close</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
