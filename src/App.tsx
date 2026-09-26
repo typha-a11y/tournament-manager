@@ -38,6 +38,7 @@ function TournamentAppInner() {
     deleteProfile,
     createTournament,
     updateTeams,
+    updateTeamsAndMatches,
     setTeams,
     setMatches,
     setFinalIsTwoLegs,
@@ -180,8 +181,7 @@ function TournamentAppInner() {
         onClose={() => setIsDrawModalOpen(false)}
         teams={teams}
         onApplyDraw={(newTeams, newMatches) => {
-          setTeams(newTeams);
-          setMatches(newMatches);
+          updateTeamsAndMatches(newTeams, newMatches);
         }}
       />
 
@@ -191,8 +191,7 @@ function TournamentAppInner() {
         onClose={() => setIsSetupWizardOpen(false)}
         teams={teams}
         onCompleteSetup={(newTeams, newMatches) => {
-          setTeams(newTeams);
-          setMatches(newMatches);
+          updateTeamsAndMatches(newTeams, newMatches);
         }}
       />
 
@@ -281,8 +280,7 @@ function TournamentAppInner() {
                 isSupabaseConnected={isSupabaseConnected}
                 onConnectionChange={() => refreshData()}
                 onDataLoaded={(newTeams, newMatches) => {
-                  setTeams(newTeams);
-                  setMatches(newMatches);
+                  updateTeamsAndMatches(newTeams, newMatches);
                 }}
                 onClose={() => setIsSupabaseModalOpen(false)}
               />
