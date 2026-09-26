@@ -6,7 +6,13 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { GroupLetter, Match, Team, TournamentProfile } from '../types/tournament';
 import { INITIAL_TEAMS, OFFICIAL_TEAM_DATA_LIST } from '../lib/constants';
-import { generateGroupMatches, generateRoundOf16Matches, GROUPS, synchronizeKnockoutProgression } from '../lib/tournamentEngine';
+import {
+  generateGroupMatches,
+  generateRoundOf16Matches,
+  GROUPS,
+  sanitizeAndDeduplicateMatches,
+  synchronizeKnockoutProgression,
+} from '../lib/tournamentEngine';
 import { getReliableClubLogo } from '../lib/logoDictionary';
 import {
   createTournamentInSupabase,
@@ -14,11 +20,90 @@ import {
   fetchTournamentDataFromSupabase,
   fetchTournamentsFromSupabase,
   getStoredCredentials,
+  pushDataToSupabase,
   saveTournamentMatchScoreToSupabase,
   saveTournamentTieScoresToSupabase,
   testSupabaseConnection,
   updateTournamentTeamsInSupabase,
 } from '../lib/supabaseClient';
+
+// Helper to reliably update or insert match scores into matches array
+function applyMatchToMatchesList(
+  currentList: Match[],
+  incomingMatch: Match,
+  teamsList: Team[]
+): Match[] {
+  const list = [...currentList];
+
+  const getTeamName = (teamId: string) => {
+    const t = teamsList.find(
+      (tm) => tm.id === teamId || (tm.name && tm.name.toLowerCase().trim() === teamId.toLowerCase().trim())
+    );
+    return t ? t.name.toLowerCase().trim() : (teamId || '').toLowerCase().trim();
+  };
+
+  const incomingHomeName = getTeamName(incomingMatch.home_team_id);
+  const incomingAwayName = getTeamName(incomingMatch.away_team_id);
+  const incomingLeg = incomingMatch.leg || 1;
+  const incomingType = incomingMatch.match_type || 'Group';
+
+  let foundIndex = -1;
+
+  // 1. Exact ID match (if not a synthesized tie ID)
+  if (incomingMatch.id && !incomingMatch.id.startsWith('tie-')) {
+    foundIndex = list.findIndex((m) => m.id === incomingMatch.id);
+  }
+
+  // 2. Match by exact team IDs and leg
+  if (foundIndex === -1) {
+    foundIndex = list.findIndex(
+      (m) =>
+        m.home_team_id === incomingMatch.home_team_id &&
+        m.away_team_id === incomingMatch.away_team_id &&
+        (m.leg || 1) === incomingLeg &&
+        (m.match_type || 'Group') === incomingType
+    );
+  }
+
+  // 3. Match by resolved team names and leg (handles UUID vs team-X format)
+  if (foundIndex === -1 && incomingHomeName && incomingAwayName) {
+    foundIndex = list.findIndex(
+      (m) =>
+        getTeamName(m.home_team_id) === incomingHomeName &&
+        getTeamName(m.away_team_id) === incomingAwayName &&
+        (m.leg || 1) === incomingLeg &&
+        (m.match_type || 'Group') === incomingType
+    );
+  }
+
+  // 4. Match by reverse pairing if leg matches
+  if (foundIndex === -1 && incomingHomeName && incomingAwayName) {
+    foundIndex = list.findIndex(
+      (m) =>
+        ((getTeamName(m.home_team_id) === incomingHomeName && getTeamName(m.away_team_id) === incomingAwayName) ||
+          (getTeamName(m.home_team_id) === incomingAwayName && getTeamName(m.away_team_id) === incomingHomeName)) &&
+        (m.leg || 1) === incomingLeg &&
+        (m.match_type || 'Group') === incomingType
+    );
+  }
+
+  if (foundIndex !== -1) {
+    list[foundIndex] = {
+      ...list[foundIndex],
+      ...incomingMatch,
+      id: list[foundIndex].id, // Keep the stable established ID
+      home_score: incomingMatch.home_score,
+      away_score: incomingMatch.away_score,
+      is_played: incomingMatch.is_played ?? (incomingMatch.home_score !== null && incomingMatch.away_score !== null),
+      home_penalties: incomingMatch.home_penalties,
+      away_penalties: incomingMatch.away_penalties,
+    };
+  } else {
+    list.push(incomingMatch);
+  }
+
+  return list;
+}
 
 const STORAGE_PROFILES_KEY = 'efootball_tournament_profiles_v3';
 const STORAGE_ACTIVE_PROFILE_KEY = 'efootball_active_profile_id_v3';
@@ -261,17 +346,20 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // 4. Matches State strictly isolated to activeTournamentId
   const [matches, setMatches] = useState<Match[]>(() => {
+    const currentTeams = INITIAL_TEAMS.map((t) => ({ ...t, tournament_id: activeTournamentId }));
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`efootball_matches_${activeTournamentId}`);
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return sanitizeAndDeduplicateMatches(parsed, currentTeams);
+          }
         } catch {
           // fallback
         }
       }
     }
-    const currentTeams = INITIAL_TEAMS.map((t) => ({ ...t, tournament_id: activeTournamentId }));
     const groupMatches = generateGroupMatches(currentTeams);
     const initialRo16 = generateRoundOf16Matches(currentTeams, groupMatches);
     return [...groupMatches, ...initialRo16].map((m) => ({
@@ -327,17 +415,22 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           // Immediately pull accurate teams and matches for this profile from Supabase
           const remoteData = await fetchTournamentDataFromSupabase(targetProfileId);
           if (remoteData.success) {
+            let activeSyncedTeams: Team[] = [];
             if (remoteData.teams && remoteData.teams.length > 0) {
-              const synced = syncTeamsWithOfficialData(remoteData.teams);
-              setTeams(synced);
+              activeSyncedTeams = syncTeamsWithOfficialData(remoteData.teams);
+              setTeams(activeSyncedTeams);
               if (typeof window !== 'undefined') {
-                localStorage.setItem(`efootball_teams_${targetProfileId}`, JSON.stringify(synced));
+                localStorage.setItem(`efootball_teams_${targetProfileId}`, JSON.stringify(activeSyncedTeams));
               }
             }
             if (remoteData.matches && remoteData.matches.length > 0) {
-              setMatches(remoteData.matches);
+              const cleanMatches = sanitizeAndDeduplicateMatches(
+                remoteData.matches,
+                activeSyncedTeams.length === 24 ? activeSyncedTeams : INITIAL_TEAMS
+              );
+              setMatches(cleanMatches);
               if (typeof window !== 'undefined') {
-                localStorage.setItem(`efootball_matches_${targetProfileId}`, JSON.stringify(remoteData.matches));
+                localStorage.setItem(`efootball_matches_${targetProfileId}`, JSON.stringify(cleanMatches));
               }
             }
           }
@@ -390,21 +483,25 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setSyncStatus('saving');
       const remote = await fetchTournamentDataFromSupabase(activeTournamentId);
       if (remote.success) {
+        let currentEffectiveTeams = teams;
         if (remote.teams && remote.teams.length > 0) {
-          const synced = syncTeamsWithOfficialData(remote.teams);
-          setTeams(synced);
+          currentEffectiveTeams = syncTeamsWithOfficialData(remote.teams);
+          setTeams(currentEffectiveTeams);
         }
         if (remote.matches && remote.matches.length > 0) {
-          setMatches(remote.matches);
+          const clean = sanitizeAndDeduplicateMatches(remote.matches, currentEffectiveTeams);
+          setMatches(clean);
         }
       }
       setSyncStatus('synced');
     } else {
       // Offline fallback: load from local storage
       const localTeams = localStorage.getItem(`efootball_teams_${activeTournamentId}`);
+      let effTeams = teams;
       if (localTeams) {
         try {
-          setTeams(syncTeamsWithOfficialData(JSON.parse(localTeams)));
+          effTeams = syncTeamsWithOfficialData(JSON.parse(localTeams));
+          setTeams(effTeams);
         } catch {
           // ignore
         }
@@ -412,13 +509,14 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const localMatches = localStorage.getItem(`efootball_matches_${activeTournamentId}`);
       if (localMatches) {
         try {
-          setMatches(JSON.parse(localMatches));
+          const parsed = JSON.parse(localMatches);
+          setMatches(sanitizeAndDeduplicateMatches(parsed, effTeams));
         } catch {
           // ignore
         }
       }
     }
-  }, [activeTournamentId, isSupabaseConnected]);
+  }, [activeTournamentId, isSupabaseConnected, teams]);
 
   // Switch Active Profile (Load Savefile)
   const setActiveTournamentId = useCallback(
@@ -458,7 +556,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (remote.success && remote.teams && remote.teams.length > 0) {
           loadedTeams = syncTeamsWithOfficialData(remote.teams);
           if (remote.matches && remote.matches.length > 0) {
-            loadedMatches = remote.matches;
+            loadedMatches = sanitizeAndDeduplicateMatches(remote.matches, loadedTeams);
           }
         }
         setSyncStatus('synced');
@@ -474,7 +572,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       if (loadedMatches && loadedMatches.length > 0) {
-        setMatches(loadedMatches);
+        setMatches(sanitizeAndDeduplicateMatches(loadedMatches, loadedTeams));
       } else {
         const groupMatches = generateGroupMatches(loadedTeams);
         const initialRo16 = generateRoundOf16Matches(loadedTeams, groupMatches);
@@ -498,79 +596,115 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         tournament_id: activeTournamentId,
       };
 
-      // 1. Optimistic local update
+      // 1. Optimistic local update + knockout bracket synchronization
+      let nextMatchesState: Match[] = [];
       setMatches((prev) => {
-        const nextList = prev.map((m) => (m.id === enrichedMatch.id ? enrichedMatch : m));
+        const nextList = applyMatchToMatchesList(prev, enrichedMatch, teams);
         const sync = synchronizeKnockoutProgression(nextList, teams, finalIsTwoLegs);
-        return sync.updatedMatches;
+        nextMatchesState = sync.updatedMatches;
+        return nextMatchesState;
       });
 
-      // 2. Update profile timestamp
-      const now = new Date().toISOString();
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === activeTournamentId ? { ...p, last_saved_at: now } : p))
-      );
+      // 2. Persist to localStorage immediately
+      if (typeof window !== 'undefined' && activeTournamentId) {
+        localStorage.setItem(
+          `efootball_matches_${activeTournamentId}`,
+          JSON.stringify(nextMatchesState)
+        );
+      }
 
-      // 3. Supabase update with tournament_id
+      // 3. Update profile timestamp
+      const now = new Date().toISOString();
+      setProfiles((prev) => {
+        const updated = prev.map((p) =>
+          p.id === activeTournamentId ? { ...p, last_saved_at: now } : p
+        );
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(updated));
+        }
+        return updated;
+      });
+
+      // 4. Supabase update with tournament_id & team mapping
       let success = true;
       if (isSupabaseConnected) {
-        const res = await saveTournamentMatchScoreToSupabase(enrichedMatch, activeTournamentId);
+        const res = await saveTournamentMatchScoreToSupabase(
+          enrichedMatch,
+          activeTournamentId,
+          teams
+        );
         success = res.success;
       }
 
-      setSyncStatus('synced');
+      setSyncStatus(isSupabaseConnected ? (success ? 'synced' : 'error') : 'offline');
       return success;
     },
-    [activeTournamentId, isSupabaseConnected]
+    [activeTournamentId, isSupabaseConnected, teams, finalIsTwoLegs]
   );
 
   // Save double-leg tie scores and sync
   const saveTieScores = useCallback(
-    async (leg1: Match, leg2: Match): Promise<boolean> => {
+    async (leg1: Match, leg2?: Match): Promise<boolean> => {
       setSyncStatus('saving');
       const enrichedLeg1: Match = {
         ...leg1,
         tournament_id: activeTournamentId,
       };
-      const enrichedLeg2: Match = {
-        ...leg2,
-        tournament_id: activeTournamentId,
-      };
+      const enrichedLeg2: Match | undefined = leg2
+        ? {
+            ...leg2,
+            tournament_id: activeTournamentId,
+          }
+        : undefined;
 
-      // 1. Optimistic update
+      // 1. Optimistic update + knockout progression using robust updater
+      let nextMatchesState: Match[] = [];
       setMatches((prev) => {
-        const nextList = prev.map((m) => {
-          if (m.id === enrichedLeg1.id) return enrichedLeg1;
-          if (m.id === enrichedLeg2.id) return enrichedLeg2;
-          return m;
-        });
+        let nextList = applyMatchToMatchesList(prev, enrichedLeg1, teams);
+        if (enrichedLeg2) {
+          nextList = applyMatchToMatchesList(nextList, enrichedLeg2, teams);
+        }
         const sync = synchronizeKnockoutProgression(nextList, teams, finalIsTwoLegs);
-        return sync.updatedMatches;
+        nextMatchesState = sync.updatedMatches;
+        return nextMatchesState;
       });
 
-      // 2. Update profile timestamp
-      const now = new Date().toISOString();
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === activeTournamentId ? { ...p, last_saved_at: now } : p))
-      );
+      // 2. Persist to localStorage immediately
+      if (typeof window !== 'undefined' && activeTournamentId) {
+        localStorage.setItem(
+          `efootball_matches_${activeTournamentId}`,
+          JSON.stringify(nextMatchesState)
+        );
+      }
 
-      // 3. Supabase update
+      // 3. Update profile timestamp
+      const now = new Date().toISOString();
+      setProfiles((prev) => {
+        const updated = prev.map((p) =>
+          p.id === activeTournamentId ? { ...p, last_saved_at: now } : p
+        );
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(updated));
+        }
+        return updated;
+      });
+
+      // 4. Supabase update
       let success = true;
       if (isSupabaseConnected) {
         const res = await saveTournamentTieScoresToSupabase(
           enrichedLeg1,
           enrichedLeg2,
-          activeTournamentId
+          activeTournamentId,
+          teams
         );
         success = res.success;
       }
 
-      // 4. Trigger global re-fetch to ensure tables and analytics update
-      await refreshData();
-      setSyncStatus('synced');
+      setSyncStatus(isSupabaseConnected ? (success ? 'synced' : 'error') : 'offline');
       return success;
     },
-    [activeTournamentId, isSupabaseConnected, refreshData]
+    [activeTournamentId, isSupabaseConnected, teams, finalIsTwoLegs]
   );
 
   // Delete profile
@@ -689,6 +823,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     if (isSupabaseConnected && activeTournamentId) {
       await updateTournamentTeamsInSupabase(freshTeams, activeTournamentId);
+      await pushDataToSupabase(freshTeams, freshMatches, activeTournamentId);
     }
 
     setSyncStatus('synced');

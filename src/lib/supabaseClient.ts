@@ -440,56 +440,153 @@ export async function updateTournamentTeamsInSupabase(
   }
 }
 
+// Helper to resolve client team IDs to Supabase team UUIDs
+async function resolveSupabaseTeamMap(
+  client: any,
+  tournamentId: string,
+  clientTeams?: Team[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { data: dbTeams } = await client
+      .from('teams')
+      .select('id, name')
+      .eq('tournament_id', tournamentId);
+
+    if (dbTeams && dbTeams.length > 0) {
+      // Map name -> dbId
+      const nameToDbId = new Map<string, string>();
+      dbTeams.forEach((dt: any) => {
+        if (dt.name) nameToDbId.set(dt.name.toLowerCase().trim(), dt.id);
+        map.set(dt.id, dt.id);
+      });
+
+      // If clientTeams provided, map clientTeam.id -> dbId
+      if (clientTeams) {
+        clientTeams.forEach((ct) => {
+          const matchedDbId = nameToDbId.get((ct.name || '').toLowerCase().trim());
+          if (matchedDbId) {
+            map.set(ct.id, matchedDbId);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Could not build team map from Supabase:', err);
+  }
+  return map;
+}
+
 // Update single match score in Supabase bound to tournament
 export async function saveTournamentMatchScoreToSupabase(
   match: Match,
-  tournamentId?: string
+  tournamentId?: string,
+  clientTeams?: Team[]
 ): Promise<{ success: boolean; message: string }> {
   const client = getSupabaseClient();
   if (!client) return { success: false, message: 'Supabase client is not configured' };
 
   try {
+    const tourneyId = tournamentId || match.tournament_id;
+    let dbHomeId = match.home_team_id;
+    let dbAwayId = match.away_team_id;
+
+    if (tourneyId) {
+      const teamMap = await resolveSupabaseTeamMap(client, tourneyId, clientTeams);
+      if (teamMap.has(match.home_team_id)) {
+        dbHomeId = teamMap.get(match.home_team_id)!;
+      }
+      if (teamMap.has(match.away_team_id)) {
+        dbAwayId = teamMap.get(match.away_team_id)!;
+      }
+    }
+
     const payload = {
       home_score: match.home_score,
       away_score: match.away_score,
       is_played: match.is_played,
-      home_penalties: match.home_penalties,
-      away_penalties: match.away_penalties,
+      home_penalties: match.home_penalties ?? null,
+      away_penalties: match.away_penalties ?? null,
     };
 
-    let query = client.from('matches').update(payload);
+    let existingMatchId: string | null = null;
+    const isUuid =
+      match.id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(match.id);
 
-    if (match.id && !match.id.startsWith('match-') && !match.id.startsWith('temp-')) {
-      query = query.eq('id', match.id);
-      if (tournamentId) {
-        query = query.eq('tournament_id', tournamentId);
-      }
-    } else {
-      query = query
-        .eq('home_team_id', match.home_team_id)
-        .eq('away_team_id', match.away_team_id)
-        .eq('match_type', match.match_type)
-        .eq('leg', match.leg || 1);
+    if (isUuid) {
+      existingMatchId = match.id;
+    } else if (tourneyId) {
+      // Look up by tournament and team IDs
+      const { data: found } = await client
+        .from('matches')
+        .select('id')
+        .eq('tournament_id', tourneyId)
+        .eq('home_team_id', dbHomeId)
+        .eq('away_team_id', dbAwayId)
+        .eq('leg', match.leg || 1)
+        .limit(1);
 
-      if (tournamentId) {
-        query = query.eq('tournament_id', tournamentId);
+      if (found && found.length > 0) {
+        existingMatchId = found[0].id;
+      } else {
+        // Fallback check by matching original client home_team_id
+        const { data: foundOriginal } = await client
+          .from('matches')
+          .select('id')
+          .eq('tournament_id', tourneyId)
+          .eq('home_team_id', match.home_team_id)
+          .eq('away_team_id', match.away_team_id)
+          .eq('leg', match.leg || 1)
+          .limit(1);
+
+        if (foundOriginal && foundOriginal.length > 0) {
+          existingMatchId = foundOriginal[0].id;
+        }
       }
     }
 
-    const { error } = await query;
-    if (error) {
-      return { success: false, message: error.message };
+    if (existingMatchId) {
+      const { error: updateErr } = await client
+        .from('matches')
+        .update(payload)
+        .eq('id', existingMatchId);
+
+      if (updateErr) {
+        return { success: false, message: updateErr.message };
+      }
+    } else if (tourneyId) {
+      // Insert match row if not found
+      const { error: insertErr } = await client.from('matches').insert({
+        tournament_id: tourneyId,
+        home_team_id: dbHomeId,
+        away_team_id: dbAwayId,
+        home_score: match.home_score,
+        away_score: match.away_score,
+        match_type: match.match_type || 'Group',
+        is_played: match.is_played,
+        group_id: match.group_id || null,
+        leg: match.leg || 1,
+        tie_id: match.tie_id || null,
+        round_number: match.round_number || 1,
+        home_penalties: match.home_penalties ?? null,
+        away_penalties: match.away_penalties ?? null,
+      });
+
+      if (insertErr) {
+        return { success: false, message: insertErr.message };
+      }
     }
 
     // Touch last_saved_at on tournament
-    if (tournamentId) {
+    if (tourneyId) {
       await client
         .from('tournaments')
         .update({ last_saved_at: new Date().toISOString() })
-        .eq('id', tournamentId);
+        .eq('id', tourneyId);
     }
 
-    return { success: true, message: 'Match score saved successfully' };
+    return { success: true, message: 'Match score saved successfully in Supabase' };
   } catch (err: unknown) {
     return {
       success: false,
@@ -501,8 +598,9 @@ export async function saveTournamentMatchScoreToSupabase(
 // Update both legs of a tie in Supabase strictly bound to active tournament_id
 export async function saveTournamentTieScoresToSupabase(
   leg1: Match,
-  leg2: Match,
-  tournamentId: string
+  leg2: Match | undefined,
+  tournamentId: string,
+  clientTeams?: Team[]
 ): Promise<{ success: boolean; message: string }> {
   const client = getSupabaseClient();
   if (!client) {
@@ -515,9 +613,9 @@ export async function saveTournamentTieScoresToSupabase(
 
   try {
     // 1. Update Leg 1
-    const p1 = saveTournamentMatchScoreToSupabase(leg1, tournamentId);
-    // 2. Update Leg 2
-    const p2 = saveTournamentMatchScoreToSupabase(leg2, tournamentId);
+    const p1 = saveTournamentMatchScoreToSupabase(leg1, tournamentId, clientTeams);
+    // 2. Update Leg 2 (if present)
+    const p2 = leg2 ? saveTournamentMatchScoreToSupabase(leg2, tournamentId, clientTeams) : Promise.resolve({ success: true, message: '' });
 
     const [r1, r2] = await Promise.all([p1, p2]);
 

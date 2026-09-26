@@ -22,7 +22,7 @@ import {
 
 export interface DoubleLegTieMatchup {
   tieId: string;
-  groupId: string;
+  groupId: GroupLetter;
   roundLeg1: number;
   roundLeg2: number;
   teamA: Team;
@@ -78,6 +78,16 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
     >
   >({});
 
+  // Helper to determine if a team ID or name matches a given team
+  const isTeamMatch = (teamIdOrName: string | undefined, targetTeam: Team): boolean => {
+    if (!teamIdOrName || !targetTeam) return false;
+    if (teamIdOrName === targetTeam.id) return true;
+    const norm = (s: string) => s.toLowerCase().trim();
+    if (norm(teamIdOrName) === norm(targetTeam.name)) return true;
+    const found = teams.find((t) => t.id === teamIdOrName);
+    return found ? norm(found.name) === norm(targetTeam.name) : false;
+  };
+
   // Compute all double-leg group ties
   const allTies = useMemo<DoubleLegTieMatchup[]>(() => {
     const ties: DoubleLegTieMatchup[] = [];
@@ -85,20 +95,24 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
 
     groupLetters.forEach((grp) => {
       const grpTeams = teams.filter((t) => t.group_id === grp);
-      const grpMatches = matches.filter((m) => m.match_type === 'Group' && m.group_id === grp);
+      const grpMatches = matches.filter(
+        (m) => m.match_type === 'Group' && (m.group_id === grp || !m.group_id)
+      );
 
       for (let i = 0; i < grpTeams.length; i++) {
         for (let j = i + 1; j < grpTeams.length; j++) {
           const teamA = grpTeams[i];
           const teamB = grpTeams[j];
 
-          const pairMatches = grpMatches.filter(
-            (m) =>
-              (m.home_team_id === teamA.id && m.away_team_id === teamB.id) ||
-              (m.home_team_id === teamB.id && m.away_team_id === teamA.id)
-          );
+          const pairMatches = grpMatches.filter((m) => {
+            const hA = isTeamMatch(m.home_team_id, teamA);
+            const aB = isTeamMatch(m.away_team_id, teamB);
+            const hB = isTeamMatch(m.home_team_id, teamB);
+            const aA = isTeamMatch(m.away_team_id, teamA);
+            return (hA && aB) || (hB && aA);
+          });
 
-          let leg1 = pairMatches.find((m) => m.leg === 1);
+          let leg1 = pairMatches.find((m) => (m.leg || 1) === 1);
           let leg2 = pairMatches.find((m) => m.leg === 2);
 
           if (!leg1 && pairMatches.length > 0) {
@@ -150,7 +164,7 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
           let aggScoreB = 0;
 
           if (isLeg1Played) {
-            if (defaultLeg1.home_team_id === teamA.id) {
+            if (isTeamMatch(defaultLeg1.home_team_id, teamA)) {
               aggScoreA += defaultLeg1.home_score || 0;
               aggScoreB += defaultLeg1.away_score || 0;
             } else {
@@ -160,7 +174,7 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
           }
 
           if (isLeg2Played) {
-            if (defaultLeg2.home_team_id === teamA.id) {
+            if (isTeamMatch(defaultLeg2.home_team_id, teamA)) {
               aggScoreA += defaultLeg2.home_score || 0;
               aggScoreB += defaultLeg2.away_score || 0;
             } else {
@@ -351,18 +365,28 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
 
     const updatedLeg1: Match = {
       ...tie.leg1,
+      home_team_id: tie.leg1.home_team_id || tie.teamA.id,
+      away_team_id: tie.leg1.away_team_id || tie.teamB.id,
       home_score: l1H,
       away_score: l1A,
       is_played: true,
       tournament_id: tournament.activeTournamentId,
+      group_id: tie.groupId,
+      leg: 1,
+      match_type: 'Group',
     };
 
     const updatedLeg2: Match = {
       ...tie.leg2,
+      home_team_id: tie.leg2.home_team_id || tie.teamB.id,
+      away_team_id: tie.leg2.away_team_id || tie.teamA.id,
       home_score: l2H,
       away_score: l2A,
       is_played: true,
       tournament_id: tournament.activeTournamentId,
+      group_id: tie.groupId,
+      leg: 2,
+      match_type: 'Group',
     };
 
     try {
@@ -584,12 +608,12 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
               : 'bg-white';
 
             // Home / Away team for Leg 1
-            const leg1Home = tie.leg1.home_team_id === tie.teamA.id ? tie.teamA : tie.teamB;
-            const leg1Away = tie.leg1.away_team_id === tie.teamB.id ? tie.teamB : tie.teamA;
+            const leg1Home = isTeamMatch(tie.leg1.home_team_id, tie.teamA) ? tie.teamA : tie.teamB;
+            const leg1Away = isTeamMatch(tie.leg1.away_team_id, tie.teamB) ? tie.teamB : tie.teamA;
 
             // Home / Away team for Leg 2 (Reverse)
-            const leg2Home = tie.leg2.home_team_id === tie.teamB.id ? tie.teamB : tie.teamA;
-            const leg2Away = tie.leg2.away_team_id === tie.teamA.id ? tie.teamA : tie.teamB;
+            const leg2Home = isTeamMatch(tie.leg2.home_team_id, tie.teamB) ? tie.teamB : tie.teamA;
+            const leg2Away = isTeamMatch(tie.leg2.away_team_id, tie.teamA) ? tie.teamA : tie.teamB;
 
             return (
               <div
@@ -640,6 +664,17 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                           </div>
                           <span className="text-[10px] font-bold text-emerald-700 mt-0.5 uppercase tracking-wide">
                             Aggregate Final
+                          </span>
+                        </div>
+                      ) : tie.isLeg1Played || tie.isLeg2Played ? (
+                        <div className="flex flex-col items-center">
+                          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-bold text-xs">
+                            <span>{tie.aggScoreA}</span>
+                            <span>:</span>
+                            <span>{tie.aggScoreB}</span>
+                          </div>
+                          <span className="text-[9px] font-semibold text-blue-600 mt-0.5">
+                            Leg Recorded
                           </span>
                         </div>
                       ) : (
@@ -718,8 +753,8 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
 
                     <div className="space-y-3">
                       {/* Row 1: Leg 1 (Home vs Away) */}
-                      <div className="bg-slate-50/90 rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 shrink-0">
+                      <div className="bg-slate-50/90 rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                           <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[11px] font-black">
                             Leg 1
                           </span>
@@ -727,13 +762,13 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                         </div>
 
                         {/* Leg 1 inputs */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 flex-1 min-w-0">
+                        <div className="flex items-center justify-between sm:justify-end gap-3 flex-1">
                           {/* Home */}
-                          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
-                            <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] text-right" title={leg1Home.name}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 hidden sm:inline truncate max-w-[120px]">
                               {leg1Home.name}
                             </span>
-                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs shrink-0">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => stepTieValue(tie.tieId, tie, 'leg1Home', -1)}
@@ -762,11 +797,11 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                             </div>
                           </div>
 
-                          <span className="text-xs font-black text-slate-400 shrink-0 px-0.5">:</span>
+                          <span className="text-xs font-black text-slate-400">:</span>
 
                           {/* Away */}
-                          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial justify-start">
-                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs shrink-0">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => stepTieValue(tie.tieId, tie, 'leg1Away', -1)}
@@ -793,7 +828,7 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                                 <Plus className="w-3 h-3" />
                               </button>
                             </div>
-                            <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] text-left" title={leg1Away.name}>
+                            <span className="text-xs font-bold text-slate-800 hidden sm:inline truncate max-w-[120px]">
                               {leg1Away.name}
                             </span>
                           </div>
@@ -801,8 +836,8 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                       </div>
 
                       {/* Row 2: Leg 2 (Away vs Home / Reverse Venue) */}
-                      <div className="bg-slate-50/90 rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 shrink-0">
+                      <div className="bg-slate-50/90 rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                           <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[11px] font-black">
                             Leg 2
                           </span>
@@ -810,13 +845,13 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                         </div>
 
                         {/* Leg 2 inputs */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 flex-1 min-w-0">
+                        <div className="flex items-center justify-between sm:justify-end gap-3 flex-1">
                           {/* Home in Leg 2 */}
-                          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
-                            <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] text-right" title={leg2Home.name}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 hidden sm:inline truncate max-w-[120px]">
                               {leg2Home.name}
                             </span>
-                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs shrink-0">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => stepTieValue(tie.tieId, tie, 'leg2Home', -1)}
@@ -845,11 +880,11 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                             </div>
                           </div>
 
-                          <span className="text-xs font-black text-slate-400 shrink-0 px-0.5">:</span>
+                          <span className="text-xs font-black text-slate-400">:</span>
 
                           {/* Away in Leg 2 */}
-                          <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial justify-start">
-                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs shrink-0">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => stepTieValue(tie.tieId, tie, 'leg2Away', -1)}
@@ -876,7 +911,7 @@ export const FixturesAndResultsView: React.FC<FixturesAndResultsViewProps> = ({
                                 <Plus className="w-3 h-3" />
                               </button>
                             </div>
-                            <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] text-left" title={leg2Away.name}>
+                            <span className="text-xs font-bold text-slate-800 hidden sm:inline truncate max-w-[120px]">
                               {leg2Away.name}
                             </span>
                           </div>

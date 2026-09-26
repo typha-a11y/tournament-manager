@@ -137,6 +137,111 @@ function calculateHeadToHeadPoints(teamAId: string, teamBId: string, groupMatche
   return aPoints - bPoints;
 }
 
+// Sanitize, harmonize, and deduplicate match fixtures ensuring exactly 72 clean double round-robin group matches + clean knockouts
+export function sanitizeAndDeduplicateMatches(
+  rawMatches: Match[],
+  teams: Team[]
+): Match[] {
+  if (!teams || teams.length === 0) return rawMatches || [];
+
+  // Generate clean 72 group matches template based on the current 24 teams
+  const cleanGroupTemplate = generateIntraGroupFixtures(teams);
+
+  // Map to store the best played/recorded match data for each pairing
+  const existingScores = new Map<string, Match>();
+
+  if (Array.isArray(rawMatches)) {
+    rawMatches.forEach((m) => {
+      const homeTeam = teams.find(
+        (t) =>
+          t.id === m.home_team_id ||
+          (m.home_team_id && t.name.toLowerCase().trim() === m.home_team_id.toLowerCase().trim())
+      );
+      const awayTeam = teams.find(
+        (t) =>
+          t.id === m.away_team_id ||
+          (m.away_team_id && t.name.toLowerCase().trim() === m.away_team_id.toLowerCase().trim())
+      );
+
+      if (homeTeam && awayTeam && (m.match_type === 'Group' || !m.match_type)) {
+        const homeName = homeTeam.name.toLowerCase().trim();
+        const awayName = awayTeam.name.toLowerCase().trim();
+        const leg = m.leg || 1;
+
+        const key = `${homeName}_${awayName}_leg${leg}`;
+        const currentBest = existingScores.get(key);
+
+        if (
+          !currentBest ||
+          (!currentBest.is_played && m.is_played) ||
+          (m.home_score !== null && currentBest.home_score === null)
+        ) {
+          existingScores.set(key, m);
+        }
+
+        if (m.id) {
+          existingScores.set(`id_${m.id}`, m);
+        }
+      }
+    });
+  }
+
+  // Merge recorded scores into the clean 72 group matches
+  const finalizedGroupMatches = cleanGroupTemplate.map((templateMatch) => {
+    const homeTeam = teams.find((t) => t.id === templateMatch.home_team_id);
+    const awayTeam = teams.find((t) => t.id === templateMatch.away_team_id);
+
+    if (homeTeam && awayTeam) {
+      const homeName = homeTeam.name.toLowerCase().trim();
+      const awayName = awayTeam.name.toLowerCase().trim();
+      const leg = templateMatch.leg || 1;
+
+      const recorded =
+        existingScores.get(`${homeName}_${awayName}_leg${leg}`) ||
+        existingScores.get(`${homeName}_${awayName}_leg1`) ||
+        existingScores.get(`id_${templateMatch.id}`);
+
+      if (recorded && (recorded.is_played || recorded.home_score !== null)) {
+        return {
+          ...templateMatch,
+          id: recorded.id && !recorded.id.startsWith('tie-') ? recorded.id : templateMatch.id,
+          home_score: recorded.home_score,
+          away_score: recorded.away_score,
+          is_played:
+            recorded.is_played ??
+            (recorded.home_score !== null && recorded.away_score !== null),
+          home_penalties: recorded.home_penalties,
+          away_penalties: recorded.away_penalties,
+        };
+      }
+    }
+
+    return templateMatch;
+  });
+
+  // Extract knockout matches (Ro16, QF, SF, Final)
+  const knockoutMatches: Match[] = [];
+  if (Array.isArray(rawMatches)) {
+    const seenKnockout = new Set<string>();
+    rawMatches.forEach((m) => {
+      if (m.match_type && m.match_type !== 'Group') {
+        const kKey = `${m.match_type}_${m.home_team_id}_${m.away_team_id}_leg${m.leg || 1}_tie${m.tie_id || ''}`;
+        if (!seenKnockout.has(kKey)) {
+          seenKnockout.add(kKey);
+          knockoutMatches.push(m);
+        }
+      }
+    });
+  }
+
+  if (knockoutMatches.length === 0) {
+    const initialRo16 = generateRoundOf16Matches(teams, finalizedGroupMatches);
+    return [...finalizedGroupMatches, ...initialRo16];
+  }
+
+  return [...finalizedGroupMatches, ...knockoutMatches];
+}
+
 // Calculate group standings for one group
 export function calculateGroupStandings(
   groupLetter: GroupLetter,
@@ -144,9 +249,14 @@ export function calculateGroupStandings(
   matches: Match[]
 ): TeamStanding[] {
   const groupTeams = teams.filter((t) => t.group_id === groupLetter);
-  const groupMatches = matches.filter((m) => m.group_id === groupLetter && m.match_type === 'Group');
+  const groupMatches = matches.filter(
+    (m) =>
+      (m.group_id === groupLetter || !m.group_id) &&
+      m.match_type === 'Group'
+  );
 
   const statsMap: Record<string, TeamStanding> = {};
+  const nameToIdMap: Record<string, string> = {};
 
   groupTeams.forEach((team) => {
     statsMap[team.id] = {
@@ -162,15 +272,62 @@ export function calculateGroupStandings(
       form: [],
       rank: 1,
     };
+    if (team.name) {
+      nameToIdMap[team.name.toLowerCase().trim()] = team.id;
+    }
   });
+
+  const countedMatches = new Set<string>();
 
   groupMatches.forEach((m) => {
     if (!m.is_played || m.home_score === null || m.away_score === null) return;
 
-    const home = statsMap[m.home_team_id];
-    const away = statsMap[m.away_team_id];
+    let homeId = m.home_team_id;
+    let awayId = m.away_team_id;
+
+    // Resolve home ID if it's stored as name or UUID
+    if (!statsMap[homeId]) {
+      const found = groupTeams.find(
+        (t) =>
+          t.id === m.home_team_id ||
+          (m.home_team_id && t.name.toLowerCase().trim() === m.home_team_id.toLowerCase().trim())
+      );
+      if (found) {
+        homeId = found.id;
+      } else {
+        const globalFound = teams.find((t) => t.id === m.home_team_id);
+        if (globalFound && nameToIdMap[globalFound.name.toLowerCase().trim()]) {
+          homeId = nameToIdMap[globalFound.name.toLowerCase().trim()];
+        }
+      }
+    }
+
+    // Resolve away ID if it's stored as name or UUID
+    if (!statsMap[awayId]) {
+      const found = groupTeams.find(
+        (t) =>
+          t.id === m.away_team_id ||
+          (m.away_team_id && t.name.toLowerCase().trim() === m.away_team_id.toLowerCase().trim())
+      );
+      if (found) {
+        awayId = found.id;
+      } else {
+        const globalFound = teams.find((t) => t.id === m.away_team_id);
+        if (globalFound && nameToIdMap[globalFound.name.toLowerCase().trim()]) {
+          awayId = nameToIdMap[globalFound.name.toLowerCase().trim()];
+        }
+      }
+    }
+
+    const home = statsMap[homeId];
+    const away = statsMap[awayId];
 
     if (!home || !away) return;
+
+    // Deduplicate counting by leg
+    const matchKey = `${homeId}_${awayId}_leg${m.leg || 1}`;
+    if (countedMatches.has(matchKey)) return;
+    countedMatches.add(matchKey);
 
     home.played += 1;
     away.played += 1;
