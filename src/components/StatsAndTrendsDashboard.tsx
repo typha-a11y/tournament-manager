@@ -26,6 +26,8 @@ import {
 } from '../lib/tournamentEngine';
 import { useTournament } from '../context/TournamentContext';
 import { ClubCrest } from './ClubCrest';
+import { BiggestWinsShowcase } from './BiggestWinsShowcase';
+import { AdvancedAnalyticsGraphs } from './AdvancedAnalyticsGraphs';
 import {
   Activity,
   ArrowDownRight,
@@ -36,6 +38,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Crown,
   Database,
   Eye,
   Filter,
@@ -66,7 +69,7 @@ interface StatsAndTrendsDashboardProps {
   onOpenScoreModal?: (match: Match) => void;
 }
 
-type ViewScope = 'all_teams' | 'individual' | 'leaders' | 'derbies';
+type ViewScope = 'all_teams' | 'biggest_wins' | 'analytics_graphs' | 'leaders' | 'individual' | 'derbies';
 type SortField = 'points' | 'goalsScored' | 'goalsConceded' | 'goalDifference' | 'won' | 'cleanSheets' | 'formPoints';
 type SortDirection = 'asc' | 'desc';
 
@@ -486,6 +489,41 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
     };
   }, [currentTournamentMatches]);
 
+  // Top 3 biggest wins for preview showcase banner
+  const biggestWinsPreview = useMemo(() => {
+    const played = currentTournamentMatches.filter(
+      (m) => m.is_played && m.home_score !== null && m.away_score !== null
+    );
+
+    return played
+      .map((m) => {
+        const homeScore = m.home_score ?? 0;
+        const awayScore = m.away_score ?? 0;
+        const margin = Math.abs(homeScore - awayScore);
+        const homeWon = homeScore > awayScore;
+        const winner = homeWon ? getTeam(m.home_team_id) : getTeam(m.away_team_id);
+        const loser = homeWon ? getTeam(m.away_team_id) : getTeam(m.home_team_id);
+        const winnerScore = homeWon ? homeScore : awayScore;
+        const loserScore = homeWon ? awayScore : homeScore;
+
+        return {
+          match: m,
+          winner,
+          loser,
+          winnerScore,
+          loserScore,
+          margin,
+          isDraw: homeScore === awayScore,
+        };
+      })
+      .filter((m) => !m.isDraw && m.margin > 0)
+      .sort((a, b) => {
+        if (b.margin !== a.margin) return b.margin - a.margin;
+        return b.winnerScore - a.winnerScore;
+      })
+      .slice(0, 3);
+  }, [currentTournamentMatches, currentTournamentTeams]);
+
   // Hot Matches / Derby Rivalries
   const hotMatches = useMemo(() => {
     const unplayed = currentTournamentMatches.filter((m) => !m.is_played);
@@ -694,7 +732,7 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
           </div>
         </div>
 
-        {/* 2. Main View Mode Scope Switcher (All Teams vs Individual Team vs Leaderboards vs Derbies) */}
+        {/* 2. Main View Mode Scope Switcher (All Teams vs Biggest Wins vs Analytics Graphs vs Leaderboards vs Individual Team vs Derbies) */}
         <div className="mt-6 pt-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
             <button
@@ -706,7 +744,31 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
               }`}
             >
               <Users className="w-4 h-4 text-blue-600" />
-              <span>All Teams Standings & Form ({currentTournamentTeams.length})</span>
+              <span>All Teams ({currentTournamentTeams.length})</span>
+            </button>
+
+            <button
+              onClick={() => setViewScope('biggest_wins')}
+              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all shrink-0 ${
+                viewScope === 'biggest_wins'
+                  ? 'bg-white text-amber-700 shadow-xs ring-1 ring-amber-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />
+              <span>Biggest Wins & Records</span>
+            </button>
+
+            <button
+              onClick={() => setViewScope('analytics_graphs')}
+              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all shrink-0 ${
+                viewScope === 'analytics_graphs'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-indigo-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4 text-indigo-600" />
+              <span>Analytics & Graphs</span>
             </button>
 
             <button
@@ -718,7 +780,7 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
               }`}
             >
               <Award className="w-4 h-4 text-amber-500" />
-              <span>Leaderboards & Superlatives</span>
+              <span>Leaderboards</span>
             </button>
 
             <button
@@ -730,19 +792,19 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
               }`}
             >
               <Activity className="w-4 h-4 text-emerald-600" />
-              <span>Individual Team Deep-Dive</span>
+              <span>Team Deep-Dive</span>
             </button>
 
             <button
               onClick={() => setViewScope('derbies')}
               className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all shrink-0 ${
                 viewScope === 'derbies'
-                  ? 'bg-white text-amber-700 shadow-xs'
+                  ? 'bg-white text-rose-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Flame className="w-4 h-4 text-rose-500" />
-              <span>Hot Derbies & Rivalries ({hotMatches.length})</span>
+              <span>Hot Derbies ({hotMatches.length})</span>
             </button>
           </div>
 
@@ -891,9 +953,98 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
 
       {/* 4. VIEW SCOPE 1: ALL TEAMS COMPREHENSIVE STANDINGS & FORM TABLE */}
       {viewScope === 'all_teams' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-          {/* Table Controls & Filters Header */}
-          <div className="p-5 border-b border-slate-200 bg-slate-50/70 space-y-4">
+        <div className="space-y-6">
+          {/* Biggest Wins Quick Spotlight Banner */}
+          {biggestWinsPreview.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/5 to-blue-500/10 rounded-2xl border border-amber-200/80 p-5 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                    <Crown className="w-5 h-5 fill-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      Tournament Biggest Wins Spotlight
+                      <span className="text-[10px] bg-amber-100 text-amber-900 font-black px-2 py-0.5 rounded-full uppercase">
+                        Record Margins
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Top landslide victories with largest goal differences across all groups.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setViewScope('biggest_wins')}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors shrink-0 shadow-2xs"
+                >
+                  <span>Explore All Record Matches</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* 3 Large Logo Match Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {biggestWinsPreview.map((win, idx) => (
+                  <div
+                    key={win.match.id || idx}
+                    className="bg-white/90 backdrop-blur-xs rounded-xl p-3.5 border border-amber-200/60 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="relative shrink-0">
+                        <ClubCrest
+                          logoUrl={win.winner.logo_url}
+                          clubName={win.winner.club_crest_name}
+                          teamName={win.winner.name}
+                          size="lg"
+                          className="ring-2 ring-emerald-500 bg-white"
+                        />
+                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full">
+                          <Crown className="w-2.5 h-2.5 fill-white" />
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-900 truncate">
+                          {win.winner.name}
+                        </div>
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {win.winner.club_crest_name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-center shrink-0 px-2 py-1 bg-slate-900 text-white rounded-lg font-mono font-black text-xs shadow-2xs">
+                      <span>{win.winnerScore} - {win.loserScore}</span>
+                      <span className="text-[9px] text-amber-300 font-bold">+{win.margin} GD</span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-end text-right">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-700 truncate">
+                          {win.loser.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          {win.loser.club_crest_name}
+                        </div>
+                      </div>
+                      <ClubCrest
+                        logoUrl={win.loser.logo_url}
+                        clubName={win.loser.club_crest_name}
+                        teamName={win.loser.name}
+                        size="md"
+                        className="opacity-80 bg-white shrink-0"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+            {/* Table Controls & Filters Header */}
+            <div className="p-5 border-b border-slate-200 bg-slate-50/70 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1206,6 +1357,24 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
             </table>
           </div>
         </div>
+      </div>
+      )}
+
+      {/* VIEW SCOPE: BIGGEST WINS & RECORDS (CREATIVE SHOWCASE WITH LARGE LOGOS) */}
+      {viewScope === 'biggest_wins' && (
+        <BiggestWinsShowcase
+          matches={currentTournamentMatches}
+          teams={currentTournamentTeams}
+          onOpenScoreModal={onOpenScoreModal}
+        />
+      )}
+
+      {/* VIEW SCOPE: ADVANCED ANALYTICS & MULTI-DIMENSIONAL GRAPHS */}
+      {viewScope === 'analytics_graphs' && (
+        <AdvancedAnalyticsGraphs
+          matches={currentTournamentMatches}
+          teams={currentTournamentTeams}
+        />
       )}
 
       {/* 5. VIEW SCOPE 2: LEADERBOARDS & SUPERLATIVES (Top Scorers, Best Defense, Best Form) */}

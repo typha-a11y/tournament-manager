@@ -13,7 +13,7 @@ interface ClubCrestProps {
   teamName?: string;
   clubName?: string;
   className?: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 }
 
 const sizeClasses = {
@@ -22,6 +22,8 @@ const sizeClasses = {
   md: 'w-8 h-8',
   lg: 'w-10 h-10',
   xl: 'w-14 h-14',
+  '2xl': 'w-20 h-20 sm:w-24 sm:h-24',
+  '3xl': 'w-28 h-28 sm:w-32 sm:h-32',
 };
 
 const iconSizes = {
@@ -30,6 +32,8 @@ const iconSizes = {
   md: 'w-4.5 h-4.5',
   lg: 'w-6 h-6',
   xl: 'w-8 h-8',
+  '2xl': 'w-12 h-12',
+  '3xl': 'w-16 h-16',
 };
 
 export const ClubCrest: React.FC<ClubCrestProps> = ({
