@@ -11,6 +11,7 @@ import {
   GitMerge,
   Layers,
   ListOrdered,
+  Medal,
   Plus,
   RefreshCw,
   Shield,
@@ -27,6 +28,7 @@ export type TabType =
   | 'fixtures'
   | 'knockout'
   | 'stats'
+  | 'wall_of_fame'
   | 'teams'
   | 'supabase_guide';
 
@@ -64,7 +66,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'third_place', label: '3rd Place Cut', icon: Shield },
     { id: 'fixtures', label: 'Fixtures & Results', icon: Calendar },
     { id: 'knockout', label: '16 Bora Bracket', icon: GitMerge },
-    { id: 'stats', label: 'Stats & Derbies', icon: TrendingUp },
+    { id: 'stats', label: 'Stats & Records', icon: TrendingUp },
+    { id: 'wall_of_fame', label: 'Wall of Fame 🎖️', icon: Medal },
     { id: 'teams', label: '24 Teams', icon: Users },
     { id: 'supabase_guide', label: 'Supabase & SQL', icon: Database },
   ];

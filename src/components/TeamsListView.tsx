@@ -8,13 +8,18 @@ import { GroupLetter, Team } from '../types/tournament';
 import { REAL_FOOTBALL_CLUBS } from '../lib/constants';
 import { ClubCrest } from './ClubCrest';
 import { getReliableClubLogo } from '../lib/logoDictionary';
+import { useTournament } from '../context/TournamentContext';
+import { computeTeamAchievements, TIER_CONFIG } from '../lib/badgeEngine';
 import {
+  Award,
   Check,
   CheckCircle2,
   Copy,
+  Crown,
   Edit3,
   ExternalLink,
   Filter,
+  Medal,
   MessageCircle,
   Phone,
   Plus,
@@ -23,6 +28,7 @@ import {
   Shield,
   Shuffle,
   Sparkles,
+  Trophy,
   User,
   Users,
   X,
@@ -32,16 +38,22 @@ interface TeamsListViewProps {
   teams: Team[];
   onUpdateTeams: (teams: Team[]) => void;
   onConductDraw: () => void;
+  onNavigateToWallOfFame?: () => void;
 }
 
 export const TeamsListView: React.FC<TeamsListViewProps> = ({
   teams,
   onUpdateTeams,
   onConductDraw,
+  onNavigateToWallOfFame,
 }) => {
+  const { matches, activeTournamentId } = useTournament();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<'ALL' | GroupLetter>('ALL');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+
+  // Compute live achievements
+  const allAchievements = computeTeamAchievements(teams, matches, activeTournamentId);
 
   // Form states for modal
   const [editName, setEditName] = useState('');
@@ -289,6 +301,35 @@ export const TeamsListView: React.FC<TeamsListViewProps> = ({
                     </p>
                   </div>
                 </div>
+
+                {/* Earned Medals Preview */}
+                {(() => {
+                  const teamBadges = allAchievements.filter((a) => a.team_id === team.id);
+                  if (teamBadges.length === 0) return null;
+                  return (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 overflow-hidden">
+                        {teamBadges.slice(0, 3).map((b) => (
+                          <span
+                            key={b.id}
+                            title={`${b.title} (${b.tier})`}
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-50 border border-amber-200 text-xs shadow-2xs"
+                          >
+                            {b.icon}
+                          </span>
+                        ))}
+                        {teamBadges.length > 3 && (
+                          <span className="text-[10px] font-black text-amber-800 bg-amber-100/70 px-1 py-0.5 rounded">
+                            +{teamBadges.length - 3}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-black font-mono text-slate-500">
+                        {teamBadges.length} Medal{teamBadges.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* WhatsApp Contact Section */}

@@ -1366,6 +1366,7 @@ export const StatsAndTrendsDashboard: React.FC<StatsAndTrendsDashboardProps> = (
           matches={currentTournamentMatches}
           teams={currentTournamentTeams}
           onOpenScoreModal={onOpenScoreModal}
+          tournamentName={activeProfile?.name || 'eFootball Tournament'}
         />
       )}
 

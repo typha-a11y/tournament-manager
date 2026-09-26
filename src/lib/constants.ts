@@ -516,7 +516,28 @@ ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS round_number INTEGER DEFAULT
 ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS tie_id TEXT;
 ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS leg INTEGER DEFAULT 1;
 
--- 4. CREATE HIGH-PERFORMANCE INDEXES
+-- 4. CREATE TEAM ACHIEVEMENTS & MEDALS WALL TABLE
+CREATE TABLE IF NOT EXISTS public.team_achievements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tournament_id UUID REFERENCES public.tournaments(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
+    badge_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    tier TEXT NOT NULL CHECK (tier IN ('bronze', 'silver', 'gold', 'diamond', 'mythic')),
+    icon TEXT NOT NULL,
+    category TEXT DEFAULT 'special',
+    metadata JSONB DEFAULT '{}'::jsonb,
+    earned_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_tournament_team_badge UNIQUE (tournament_id, team_id, badge_key)
+);
+
+-- Ensure team_achievements columns exist if table was previously created
+ALTER TABLE public.team_achievements ADD COLUMN IF NOT EXISTS tournament_id UUID REFERENCES public.tournaments(id) ON DELETE CASCADE;
+ALTER TABLE public.team_achievements ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'special';
+ALTER TABLE public.team_achievements ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+-- 5. CREATE HIGH-PERFORMANCE INDEXES
 CREATE INDEX IF NOT EXISTS idx_teams_tournament ON public.teams (tournament_id);
 CREATE INDEX IF NOT EXISTS idx_teams_group ON public.teams (group_id);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament ON public.matches (tournament_id);
@@ -524,13 +545,17 @@ CREATE INDEX IF NOT EXISTS idx_matches_home_team ON public.matches (home_team_id
 CREATE INDEX IF NOT EXISTS idx_matches_away_team ON public.matches (away_team_id);
 CREATE INDEX IF NOT EXISTS idx_matches_type_played ON public.matches (match_type, is_played);
 CREATE INDEX IF NOT EXISTS idx_matches_tie ON public.matches (tie_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_tournament ON public.team_achievements (tournament_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_team ON public.team_achievements (team_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_tier ON public.team_achievements (tier);
 
--- 5. ENABLE ROW LEVEL SECURITY (RLS)
+-- 6. ENABLE ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.tournaments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.team_achievements ENABLE ROW LEVEL SECURITY;
 
--- 6. DROP EXISTING POLICIES TO PREVENT 'ERROR 42710: POLICY ALREADY EXISTS'
+-- 7. DROP EXISTING POLICIES TO PREVENT 'ERROR 42710: POLICY ALREADY EXISTS'
 DROP POLICY IF EXISTS "Allow public read access on tournaments" ON public.tournaments;
 DROP POLICY IF EXISTS "Allow public insert/update/delete on tournaments" ON public.tournaments;
 DROP POLICY IF EXISTS "Allow public read tournaments" ON public.tournaments;
@@ -549,15 +574,19 @@ DROP POLICY IF EXISTS "Allow public read matches" ON public.matches;
 DROP POLICY IF EXISTS "Allow public write matches" ON public.matches;
 DROP POLICY IF EXISTS "Allow public all matches" ON public.matches;
 
--- 7. RE-CREATE CLEAN & UNRESTRICTED ACCESS POLICIES (FOR VERCEL, APPS & CLIENTS)
+DROP POLICY IF EXISTS "Allow public all achievements" ON public.team_achievements;
+
+-- 8. RE-CREATE CLEAN & UNRESTRICTED ACCESS POLICIES (FOR VERCEL, APPS & CLIENTS)
 CREATE POLICY "Allow public all tournaments" ON public.tournaments FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all teams" ON public.teams FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all matches" ON public.matches FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all achievements" ON public.team_achievements FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Grant schema table permissions to anon & authenticated users
 GRANT ALL ON TABLE public.tournaments TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.teams TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.matches TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.team_achievements TO anon, authenticated, service_role;
 
 -- 8. INITIALIZE STARTER TOURNAMENT & ALL 24 PLAYERS WITH OFFICIAL WHATSAPP CONTACTS
 DO $$

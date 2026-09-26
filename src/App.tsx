@@ -13,6 +13,7 @@ import { ThirdPlaceMiniLeague } from './components/ThirdPlaceMiniLeague';
 import { FixturesAndResultsView } from './components/FixturesAndResultsView';
 import { KnockoutBracketView } from './components/KnockoutBracketView';
 import { StatsAndTrendsDashboard } from './components/StatsAndTrendsDashboard';
+import { TournamentWallOfFame } from './components/TournamentWallOfFame';
 import { TeamsListView } from './components/TeamsListView';
 import { SupabaseSettingsView } from './components/SupabaseSettingsView';
 import { MatchScoreModal } from './components/MatchScoreModal';
@@ -119,6 +120,13 @@ function TournamentAppInner() {
             teams={teams}
             matches={matches}
             onOpenScoreModal={(m) => setSelectedMatchForModal(m)}
+          />
+        )}
+
+        {currentTab === 'wall_of_fame' && (
+          <TournamentWallOfFame
+            teams={teams}
+            matches={matches}
           />
         )}
 

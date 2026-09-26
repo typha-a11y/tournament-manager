@@ -33,6 +33,22 @@ export interface Team {
   phone?: string;
 }
 
+export type MedalTier = 'bronze' | 'silver' | 'gold' | 'diamond' | 'mythic';
+
+export interface TeamAchievement {
+  id: string;
+  tournament_id?: string;
+  team_id: string;
+  badge_key: string;
+  title: string;
+  description: string;
+  tier: MedalTier;
+  icon: string;
+  category: 'championship' | 'attack' | 'defense' | 'streak' | 'special';
+  earned_at?: string;
+  metadata?: Record<string, any>;
+}
+
 export interface Match {
   id: string;
   tournament_id?: string;
