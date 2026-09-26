@@ -26,6 +26,7 @@ import {
   Server,
   ShieldCheck,
   Terminal,
+  Wrench,
 } from 'lucide-react';
 
 interface SupabaseSettingsViewProps {
@@ -43,11 +44,12 @@ export const SupabaseSettingsView: React.FC<SupabaseSettingsViewProps> = ({
   onConnectionChange,
   onDataLoaded,
 }) => {
-  const { activeTournamentId } = useTournament();
+  const { activeTournamentId, resetToOfficialRoster } = useTournament();
   const initialCreds = getStoredCredentials();
   const [supabaseUrl, setSupabaseUrl] = useState(initialCreds.url);
   const [anonKey, setAnonKey] = useState(initialCreds.anonKey);
   const [activeGuideTab, setActiveGuideTab] = useState<'sql' | 'client' | 'nextjs'>('sql');
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const [testStatus, setTestStatus] = useState<{
     loading: boolean;
@@ -273,6 +275,27 @@ export const SupabaseSettingsView: React.FC<SupabaseSettingsViewProps> = ({
                     className={`w-3.5 h-3.5 ${fetchStatus.loading ? 'animate-spin' : ''}`}
                   />
                   <span>Fetch from Supabase</span>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Clean any database duplicates and reset current tournament to the clean 24-team official roster?')) {
+                      setIsCleaning(true);
+                      await resetToOfficialRoster();
+                      setIsCleaning(false);
+                      setSyncStatus({
+                        loading: false,
+                        success: true,
+                        message: 'Successfully purged duplicates and resynced 24 official teams!',
+                      });
+                    }
+                  }}
+                  disabled={isCleaning}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+                  title="Fix duplicates in Supabase database and restore clean 24 teams"
+                >
+                  <Wrench className={`w-3.5 h-3.5 ${isCleaning ? 'animate-spin' : ''}`} />
+                  <span>{isCleaning ? 'Cleaning DB...' : 'Clean DB & Heal Roster'}</span>
                 </button>
               </>
             )}

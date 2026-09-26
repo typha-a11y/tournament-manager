@@ -37,6 +37,8 @@ interface NavbarProps {
   onSelectTab: (tab: TabType) => void;
   isSupabaseConnected: boolean;
   syncStatus: 'synced' | 'saving' | 'offline' | 'error';
+  hasUnsavedChanges?: boolean;
+  onForceSave?: () => void;
   activeProfile: TournamentProfile | null;
   onOpenProfileSelector: () => void;
   onOpenScoreModal: () => void;
@@ -50,6 +52,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   isSupabaseConnected,
   syncStatus,
+  hasUnsavedChanges,
+  onForceSave,
   activeProfile,
   onOpenProfileSelector,
   onOpenScoreModal,
@@ -110,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {syncStatus === 'saving' && (
               <span className="flex items-center gap-1.5 text-amber-300 text-[11px] font-medium bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/60">
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-                <span className="hidden xs:inline">Saving to Supabase...</span>
+                <span className="hidden xs:inline">Autosaving to Cloud...</span>
                 <span className="xs:hidden">Saving...</span>
               </span>
             )}
@@ -118,15 +122,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             {syncStatus === 'synced' && (
               <span className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-medium bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Supabase Live</span>
+                <span>Autosaved (Supabase Live)</span>
               </span>
             )}
 
             {syncStatus === 'offline' && (
-              <span className="flex items-center gap-1.5 text-slate-400 text-[11px] font-medium bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                <span>Local Cache</span>
+              <span className="flex items-center gap-1.5 text-slate-300 text-[11px] font-medium bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>Autosaved (Local Cache)</span>
               </span>
+            )}
+
+            {onForceSave && (
+              <button
+                onClick={onForceSave}
+                title="Force instant save & sync with cloud database"
+                className="flex items-center gap-1 text-[11px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-700 transition-colors"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span className="hidden sm:inline">Sync Now</span>
+              </button>
             )}
 
             <span className="text-slate-400 text-[11px] font-mono font-medium">

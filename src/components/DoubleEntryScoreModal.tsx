@@ -329,14 +329,14 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
             </div>
 
             {/* Leg 1 Steppers & Score Inputs */}
-            <div className="grid grid-cols-7 items-center gap-3">
+            <div className="flex items-center justify-between gap-2 sm:gap-4">
               {/* Home Team (Team A) */}
-              <div className="col-span-3 flex items-center justify-end gap-2.5 text-right">
-                <div>
-                  <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+              <div className="flex-1 flex items-center justify-end gap-2 text-right min-w-0">
+                <div className="min-w-0">
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
                     {teamA.name}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-medium">
+                  <div className="text-[10px] text-slate-500 font-medium truncate">
                     {teamA.club_crest_name} <span className="text-blue-600 font-bold">(Home)</span>
                   </div>
                 </div>
@@ -345,83 +345,83 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
                   clubName={teamA.club_crest_name}
                   teamName={teamA.name}
                   size="sm"
+                  className="shrink-0"
                 />
               </div>
 
-              {/* Score inputs with +/- steppers */}
-              <div className="col-span-1 flex items-center justify-center gap-1.5">
-                <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleStepper(setLeg1HomeScore, leg1HomeScore, -1)}
-                      className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={leg1HomeScore}
-                      onChange={(e) => setLeg1HomeScore(e.target.value)}
-                      placeholder="0"
-                      className="w-10 h-10 text-center font-bold font-mono text-base bg-white border-2 border-blue-400 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-600"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleStepper(setLeg1HomeScore, leg1HomeScore, 1)}
-                      className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                    >
-                      +
-                    </button>
-                  </div>
+              {/* Score inputs with +/- steppers - guaranteed no wrapping */}
+              <div className="shrink-0 flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
+                {/* Home Stepper */}
+                <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => handleStepper(setLeg1HomeScore, leg1HomeScore, -1)}
+                    className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={leg1HomeScore}
+                    onChange={(e) => setLeg1HomeScore(e.target.value)}
+                    placeholder="0"
+                    className="w-10 sm:w-11 h-8 sm:h-9 text-center font-black font-mono text-sm sm:text-base text-slate-900 bg-white focus:outline-none focus:bg-blue-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleStepper(setLeg1HomeScore, leg1HomeScore, 1)}
+                    className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                  >
+                    +
+                  </button>
                 </div>
 
-                <span className="text-slate-400 font-bold text-sm">:</span>
+                <span className="text-slate-400 font-black text-sm sm:text-base px-0.5">:</span>
 
-                <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleStepper(setLeg1AwayScore, leg1AwayScore, -1)}
-                      className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={leg1AwayScore}
-                      onChange={(e) => setLeg1AwayScore(e.target.value)}
-                      placeholder="0"
-                      className="w-10 h-10 text-center font-bold font-mono text-base bg-white border-2 border-blue-400 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-600"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleStepper(setLeg1AwayScore, leg1AwayScore, 1)}
-                      className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                    >
-                      +
-                    </button>
-                  </div>
+                {/* Away Stepper */}
+                <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => handleStepper(setLeg1AwayScore, leg1AwayScore, -1)}
+                    className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={leg1AwayScore}
+                    onChange={(e) => setLeg1AwayScore(e.target.value)}
+                    placeholder="0"
+                    className="w-10 sm:w-11 h-8 sm:h-9 text-center font-black font-mono text-sm sm:text-base text-slate-900 bg-white focus:outline-none focus:bg-blue-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleStepper(setLeg1AwayScore, leg1AwayScore, 1)}
+                    className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                  >
+                    +
+                  </button>
                 </div>
               </div>
 
               {/* Away Team (Team B) */}
-              <div className="col-span-3 flex items-center gap-2.5 text-left">
+              <div className="flex-1 flex items-center justify-start gap-2 text-left min-w-0">
                 <ClubCrest
                   logoUrl={teamB.logo_url}
                   clubName={teamB.club_crest_name}
                   teamName={teamB.name}
                   size="sm"
+                  className="shrink-0"
                 />
-                <div>
-                  <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <div className="min-w-0">
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
                     {teamB.name}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-medium">
+                  <div className="text-[10px] text-slate-500 font-medium truncate">
                     {teamB.club_crest_name} <span className="text-slate-400">(Away)</span>
                   </div>
                 </div>
@@ -455,14 +455,14 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
               </div>
 
               {/* Leg 2 Steppers & Score Inputs (Team B at home, Team A away) */}
-              <div className="grid grid-cols-7 items-center gap-3">
+              <div className="flex items-center justify-between gap-2 sm:gap-4">
                 {/* Home Team (Team B in reverse leg) */}
-                <div className="col-span-3 flex items-center justify-end gap-2.5 text-right">
-                  <div>
-                    <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <div className="flex-1 flex items-center justify-end gap-2 text-right min-w-0">
+                  <div className="min-w-0">
+                    <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
                       {teamB.name}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-medium">
+                    <div className="text-[10px] text-slate-500 font-medium truncate">
                       {teamB.club_crest_name} <span className="text-indigo-600 font-bold">(Home)</span>
                     </div>
                   </div>
@@ -471,83 +471,83 @@ export const DoubleEntryScoreModal: React.FC<DoubleEntryScoreModalProps> = ({
                     clubName={teamB.club_crest_name}
                     teamName={teamB.name}
                     size="sm"
+                    className="shrink-0"
                   />
                 </div>
 
-                {/* Score inputs */}
-                <div className="col-span-1 flex items-center justify-center gap-1.5">
-                  <div className="flex flex-col items-center">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(setLeg2HomeScore, leg2HomeScore, -1)}
-                        className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min="0"
-                        max="99"
-                        value={leg2HomeScore}
-                        onChange={(e) => setLeg2HomeScore(e.target.value)}
-                        placeholder="0"
-                        className="w-10 h-10 text-center font-bold font-mono text-base bg-white border-2 border-indigo-400 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(setLeg2HomeScore, leg2HomeScore, 1)}
-                        className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
+                {/* Score inputs - guaranteed no wrapping */}
+                <div className="shrink-0 flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap">
+                  {/* Home Stepper */}
+                  <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => handleStepper(setLeg2HomeScore, leg2HomeScore, -1)}
+                      className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      value={leg2HomeScore}
+                      onChange={(e) => setLeg2HomeScore(e.target.value)}
+                      placeholder="0"
+                      className="w-10 sm:w-11 h-8 sm:h-9 text-center font-black font-mono text-sm sm:text-base text-slate-900 bg-white focus:outline-none focus:bg-indigo-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleStepper(setLeg2HomeScore, leg2HomeScore, 1)}
+                      className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                    >
+                      +
+                    </button>
                   </div>
 
-                  <span className="text-slate-400 font-bold text-sm">:</span>
+                  <span className="text-slate-400 font-black text-sm sm:text-base px-0.5">:</span>
 
-                  <div className="flex flex-col items-center">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(setLeg2AwayScore, leg2AwayScore, -1)}
-                        className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min="0"
-                        max="99"
-                        value={leg2AwayScore}
-                        onChange={(e) => setLeg2AwayScore(e.target.value)}
-                        placeholder="0"
-                        className="w-10 h-10 text-center font-bold font-mono text-base bg-white border-2 border-indigo-400 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(setLeg2AwayScore, leg2AwayScore, 1)}
-                        className="w-5 h-5 rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
+                  {/* Away Stepper */}
+                  <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => handleStepper(setLeg2AwayScore, leg2AwayScore, -1)}
+                      className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      value={leg2AwayScore}
+                      onChange={(e) => setLeg2AwayScore(e.target.value)}
+                      placeholder="0"
+                      className="w-10 sm:w-11 h-8 sm:h-9 text-center font-black font-mono text-sm sm:text-base text-slate-900 bg-white focus:outline-none focus:bg-indigo-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleStepper(setLeg2AwayScore, leg2AwayScore, 1)}
+                      className="w-7 h-8 sm:w-8 sm:h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 transition-colors text-sm font-bold"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
 
                 {/* Away Team (Team A in reverse leg) */}
-                <div className="col-span-3 flex items-center gap-2.5 text-left">
+                <div className="flex-1 flex items-center justify-start gap-2 text-left min-w-0">
                   <ClubCrest
                     logoUrl={teamA.logo_url}
                     clubName={teamA.club_crest_name}
                     teamName={teamA.name}
                     size="sm"
+                    className="shrink-0"
                   />
-                  <div>
-                    <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                  <div className="min-w-0">
+                    <div className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
                       {teamA.name}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-medium">
+                    <div className="text-[10px] text-slate-500 font-medium truncate">
                       {teamA.club_crest_name} <span className="text-slate-400">(Away)</span>
                     </div>
                   </div>

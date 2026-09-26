@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { GroupLetter, Match, Team, TournamentProfile } from '../types/tournament';
 import { INITIAL_TEAMS, OFFICIAL_TEAM_DATA_LIST } from '../lib/constants';
-import { generateGroupMatches, generateRoundOf16Matches, synchronizeKnockoutProgression } from '../lib/tournamentEngine';
+import { generateGroupMatches, generateRoundOf16Matches, GROUPS, synchronizeKnockoutProgression } from '../lib/tournamentEngine';
 import { getReliableClubLogo } from '../lib/logoDictionary';
 import {
   createTournamentInSupabase,
@@ -59,45 +59,123 @@ const INITIAL_PROFILES_PRESET: TournamentProfile[] = [
   },
 ];
 
-// Helper to ensure official team logos & club mappings while preserving user edits
-export function syncTeamsWithOfficialData(rawTeams: Team[]): Team[] {
-  if (!rawTeams || rawTeams.length === 0) return INITIAL_TEAMS;
-  return rawTeams.map((t, idx) => {
-    const lowerName = (t.name || '').toLowerCase().trim();
-    const isRogerMuncaster = lowerName.includes('roger') || lowerName.includes('muncaster');
-    const isJazzynorman = lowerName.includes('jazzy') || lowerName.includes('norman');
+// Helper to sanitize, deduplicate, and heal team rosters (guaranteeing exactly 24 unique teams across Groups A-F)
+export function sanitizeAndDeduplicateTeams(rawTeams: Team[]): Team[] {
+  if (!rawTeams || !Array.isArray(rawTeams) || rawTeams.length === 0) {
+    return INITIAL_TEAMS;
+  }
 
-    const official =
-      OFFICIAL_TEAM_DATA_LIST.find(
+  // 1. Check for duplicates in rawTeams (by name or id)
+  const seenNames = new Set<string>();
+  const uniqueTeams: Team[] = [];
+
+  rawTeams.forEach((t) => {
+    const rawName = (t.name || '').trim();
+    const lowerName = rawName.toLowerCase();
+    if (lowerName && !seenNames.has(lowerName)) {
+      seenNames.add(lowerName);
+      uniqueTeams.push(t);
+    }
+  });
+
+  // 2. Check if uniqueTeams is healthy (e.g., at least 20 unique teams with valid names)
+  const isHealthyRoster =
+    uniqueTeams.length >= 20 &&
+    OFFICIAL_TEAM_DATA_LIST.filter((o) =>
+      uniqueTeams.some((u) => u.name.toLowerCase().trim() === o.name.toLowerCase().trim())
+    ).length >= 16;
+
+  // 3. If the roster was heavily corrupted (e.g. all set to Christian or < 16 recognized teams), rebuild from official list
+  if (!isHealthyRoster || uniqueTeams.length !== 24) {
+    // Reconstruct clean 24 teams preserving any legitimate custom WhatsApp contacts or edits if matched
+    return OFFICIAL_TEAM_DATA_LIST.map((official, idx) => {
+      const existingUserEdit = uniqueTeams.find(
+        (u) => u.name.toLowerCase().trim() === official.name.toLowerCase().trim()
+      );
+
+      const reliableLogo = getReliableClubLogo(
+        official.clubName,
+        existingUserEdit?.logo_url || official.logoUrl
+      );
+
+      return {
+        id: existingUserEdit?.id && !existingUserEdit.id.startsWith('team-')
+          ? existingUserEdit.id
+          : `team-${idx + 1}`,
+        name: official.name,
+        club_crest_name: official.clubName,
+        logo_url: reliableLogo,
+        group_id: official.groupId as GroupLetter,
+        pot: official.pot,
+        whatsapp: existingUserEdit?.whatsapp || existingUserEdit?.phone || official.whatsapp || '',
+        phone: existingUserEdit?.phone || existingUserEdit?.whatsapp || official.phone || '',
+      };
+    });
+  }
+
+  // 4. If uniqueTeams has 24 unique teams, ensure each group A-F has 4 teams, and clean logos
+  const groupCounts: Record<GroupLetter, number> = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
+  let needsGroupRebalance = false;
+
+  uniqueTeams.forEach((t) => {
+    if (t.group_id && groupCounts[t.group_id] !== undefined) {
+      groupCounts[t.group_id]++;
+    } else {
+      needsGroupRebalance = true;
+    }
+  });
+
+  // If any group has != 4 teams, rebalance by matching with official group IDs or distributing
+  if (needsGroupRebalance || Object.values(groupCounts).some((c) => c !== 4)) {
+    return uniqueTeams.map((t, idx) => {
+      const lowerName = (t.name || '').toLowerCase().trim();
+      const official = OFFICIAL_TEAM_DATA_LIST.find(
         (o) => o.name.toLowerCase().trim() === lowerName
       ) || OFFICIAL_TEAM_DATA_LIST[idx];
 
-    const clubCrestName = t.club_crest_name || (isRogerMuncaster
-      ? 'Paris Saint-Germain'
-      : isJazzynorman
-      ? 'Corinthians'
-      : official?.clubName);
+      const clubName = t.club_crest_name || official?.clubName || 'Club';
+      const reliableLogo = getReliableClubLogo(clubName, t.logo_url || official?.logoUrl);
 
-    const reliableLogo = getReliableClubLogo(
-      clubCrestName || t.name,
-      t.logo_url || official?.logoUrl
+      return {
+        ...t,
+        id: t.id || `team-${idx + 1}`,
+        name: t.name || official?.name || `Team ${idx + 1}`,
+        club_crest_name: clubName,
+        logo_url: reliableLogo,
+        group_id: (official?.groupId || GROUPS[Math.floor(idx / 4)] || 'A') as GroupLetter,
+        pot: official?.pot || ((idx % 4) + 1),
+        whatsapp: t.whatsapp || t.phone || official?.whatsapp || '',
+        phone: t.phone || t.whatsapp || official?.phone || '',
+      };
+    });
+  }
+
+  // Standard enrichment for healthy 24-team list
+  return uniqueTeams.map((t, idx) => {
+    const lowerName = (t.name || '').toLowerCase().trim();
+    const official = OFFICIAL_TEAM_DATA_LIST.find(
+      (o) => o.name.toLowerCase().trim() === lowerName
     );
 
-    const whatsapp = t.whatsapp ?? t.phone ?? official?.whatsapp ?? '';
-    const phone = t.phone ?? t.whatsapp ?? official?.phone ?? '';
+    const clubCrestName = t.club_crest_name || official?.clubName || 'Club';
+    const reliableLogo = getReliableClubLogo(clubCrestName, t.logo_url || official?.logoUrl);
 
     return {
       ...t,
+      id: t.id || `team-${idx + 1}`,
       name: t.name || official?.name || `Team ${idx + 1}`,
-      whatsapp,
-      phone,
-      logo_url: reliableLogo,
       club_crest_name: clubCrestName,
-      group_id: (t.group_id ?? official?.groupId ?? null) as GroupLetter | null,
-      pot: t.pot ?? official?.pot ?? 1,
+      logo_url: reliableLogo,
+      group_id: (t.group_id || official?.groupId || 'A') as GroupLetter,
+      pot: t.pot || official?.pot || 1,
+      whatsapp: t.whatsapp ?? t.phone ?? official?.whatsapp ?? '',
+      phone: t.phone ?? t.whatsapp ?? official?.phone ?? '',
     };
   });
 }
+
+// Backward-compatible alias
+export const syncTeamsWithOfficialData = sanitizeAndDeduplicateTeams;
 
 interface TournamentContextType {
   activeTournamentId: string;
@@ -124,6 +202,7 @@ interface TournamentContextType {
   setProfiles: React.Dispatch<React.SetStateAction<TournamentProfile[]>>;
   setFinalIsTwoLegs: (val: boolean) => void;
   checkSupabaseConnection: () => Promise<void>;
+  resetToOfficialRoster: () => Promise<void>;
 }
 
 const TournamentContext = createContext<TournamentContextType | null>(null);
@@ -578,6 +657,43 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [activeTournamentId, isSupabaseConnected]
   );
 
+  // Reset to pristine official 24-team roster and generate 72 group fixtures
+  const resetToOfficialRoster = useCallback(async () => {
+    setSyncStatus('saving');
+    const freshTeams: Team[] = OFFICIAL_TEAM_DATA_LIST.map((item, idx) => ({
+      id: `team-${idx + 1}`,
+      tournament_id: activeTournamentId,
+      name: item.name,
+      club_crest_name: item.clubName,
+      logo_url: item.logoUrl,
+      group_id: item.groupId as GroupLetter,
+      pot: item.pot,
+      whatsapp: item.whatsapp || '',
+      phone: item.phone || '',
+    }));
+
+    const groupMatches = generateGroupMatches(freshTeams);
+    const initialRo16 = generateRoundOf16Matches(freshTeams, groupMatches);
+    const freshMatches = [...groupMatches, ...initialRo16].map((m) => ({
+      ...m,
+      tournament_id: activeTournamentId,
+    }));
+
+    setTeams(freshTeams);
+    setMatches(freshMatches);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`efootball_teams_${activeTournamentId}`, JSON.stringify(freshTeams));
+      localStorage.setItem(`efootball_matches_${activeTournamentId}`, JSON.stringify(freshMatches));
+    }
+
+    if (isSupabaseConnected && activeTournamentId) {
+      await updateTournamentTeamsInSupabase(freshTeams, activeTournamentId);
+    }
+
+    setSyncStatus('synced');
+  }, [activeTournamentId, isSupabaseConnected]);
+
   return (
     <TournamentContext.Provider
       value={{
@@ -601,6 +717,7 @@ export const TournamentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setProfiles,
         setFinalIsTwoLegs,
         checkSupabaseConnection,
+        resetToOfficialRoster,
       }}
     >
       {children}

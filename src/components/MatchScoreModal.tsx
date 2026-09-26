@@ -139,54 +139,76 @@ export const MatchScoreModal: React.FC<MatchScoreModalProps> = ({
                 <span className="text-[11px] text-slate-500 mb-3">Home</span>
 
                 {/* Score Controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                   <button
+                    type="button"
                     onClick={() => setHomeScore(Math.max(0, homeScore - 1))}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors font-bold text-sm"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <span className="w-10 text-2xl font-black font-mono tabular-nums text-slate-900 text-center">
-                    {homeScore}
-                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={homeScore}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setHomeScore(isNaN(val) ? 0 : Math.max(0, Math.min(99, val)));
+                    }}
+                    className="w-12 h-9 text-center font-black font-mono text-xl tabular-nums text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
                   <button
+                    type="button"
                     onClick={() => setHomeScore(homeScore + 1)}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors font-bold text-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              <div className="text-xl font-bold text-slate-300 font-mono">VS</div>
+              <div className="text-xl font-bold text-slate-300 font-mono shrink-0 px-1">VS</div>
 
               {/* Away Team */}
-              <div className="flex-1 flex flex-col items-center text-center">
+              <div className="flex-1 flex flex-col items-center text-center min-w-0">
                 <ClubCrest
                   logoUrl={awayTeam.logo_url}
                   clubName={awayTeam.club_crest_name}
                   teamName={awayTeam.name}
                   size="xl"
                 />
-                <span className="font-bold text-slate-900 text-sm mt-2 line-clamp-1">
+                <span className="font-bold text-slate-900 text-sm mt-2 truncate max-w-full">
                   {awayTeam.name}
                 </span>
-                <span className="text-[11px] text-slate-500 mb-3">Away</span>
+                <span className="text-[11px] text-slate-500 mb-3 truncate max-w-full">
+                  {awayTeam.club_crest_name || 'Away'}
+                </span>
 
                 {/* Score Controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                   <button
+                    type="button"
                     onClick={() => setAwayScore(Math.max(0, awayScore - 1))}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors font-bold text-sm"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <span className="w-10 text-2xl font-black font-mono tabular-nums text-slate-900 text-center">
-                    {awayScore}
-                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={awayScore}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setAwayScore(isNaN(val) ? 0 : Math.max(0, Math.min(99, val)));
+                    }}
+                    className="w-12 h-9 text-center font-black font-mono text-xl tabular-nums text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  />
                   <button
+                    type="button"
                     onClick={() => setAwayScore(awayScore + 1)}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors font-bold text-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>

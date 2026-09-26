@@ -341,6 +341,17 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       }
     }
 
+    // Deduplicate teams strictly by name to prevent multiple duplicate rows
+    const uniqueTeamMap = new Map<string, any>();
+    finalTeamsData.forEach((t) => {
+      const cleanName = (t.name || '').trim().toLowerCase();
+      if (cleanName && !uniqueTeamMap.has(cleanName)) {
+        uniqueTeamMap.set(cleanName, t);
+      }
+    });
+
+    const deduplicatedTeams = Array.from(uniqueTeamMap.values());
+
     if (finalMatchesData.length === 0) {
       const { data: allMatches } = await client
         .from('matches')
@@ -351,8 +362,8 @@ export async function fetchTournamentDataFromSupabase(tournamentId: string): Pro
       }
     }
 
-    const parsedTeams: Team[] = finalTeamsData.map((t) => ({
-      id: t.id,
+    const parsedTeams: Team[] = deduplicatedTeams.map((t, idx) => ({
+      id: t.id || `team-${idx + 1}`,
       tournament_id: t.tournament_id || tournamentId,
       name: t.name,
       logo_url: t.logo_url,

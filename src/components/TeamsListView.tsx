@@ -9,28 +9,25 @@ import { REAL_FOOTBALL_CLUBS } from '../lib/constants';
 import { ClubCrest } from './ClubCrest';
 import { getReliableClubLogo } from '../lib/logoDictionary';
 import { useTournament } from '../context/TournamentContext';
-import { computeTeamAchievements, TIER_CONFIG } from '../lib/badgeEngine';
 import {
-  Award,
   Check,
   CheckCircle2,
   Copy,
-  Crown,
   Edit3,
   ExternalLink,
   Filter,
-  Medal,
   MessageCircle,
   Phone,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Shield,
   Shuffle,
   Sparkles,
-  Trophy,
   User,
   Users,
+  Wrench,
   X,
 } from 'lucide-react';
 
@@ -38,22 +35,19 @@ interface TeamsListViewProps {
   teams: Team[];
   onUpdateTeams: (teams: Team[]) => void;
   onConductDraw: () => void;
-  onNavigateToWallOfFame?: () => void;
 }
 
 export const TeamsListView: React.FC<TeamsListViewProps> = ({
   teams,
   onUpdateTeams,
   onConductDraw,
-  onNavigateToWallOfFame,
 }) => {
-  const { matches, activeTournamentId } = useTournament();
+  const { resetToOfficialRoster, syncStatus } = useTournament();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<'ALL' | GroupLetter>('ALL');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-
-  // Compute live achievements
-  const allAchievements = computeTeamAchievements(teams, matches, activeTournamentId);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   // Form states for modal
   const [editName, setEditName] = useState('');
@@ -178,6 +172,24 @@ export const TeamsListView: React.FC<TeamsListViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              onClick={async () => {
+                if (window.confirm('Restore all 24 official unique teams across Groups A to F? This removes duplicates and generates 72 balanced double round-robin fixtures.')) {
+                  setIsResetting(true);
+                  await resetToOfficialRoster();
+                  setIsResetting(false);
+                  setResetSuccess(true);
+                  setTimeout(() => setResetSuccess(false), 3000);
+                }
+              }}
+              disabled={isResetting}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold border border-amber-300 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Fix any duplicate teams and restore official 24-team roster"
+            >
+              <Wrench className={`w-3.5 h-3.5 text-amber-600 ${isResetting ? 'animate-spin' : ''}`} />
+              <span>{isResetting ? 'Fixing...' : resetSuccess ? 'Roster Repaired!' : 'Fix Duplicates & Reset Roster'}</span>
+            </button>
+
+            <button
               onClick={handleCopyAllContacts}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors shadow-2xs"
               title="Copy all 24 player numbers for WhatsApp group invites"
@@ -197,7 +209,7 @@ export const TeamsListView: React.FC<TeamsListViewProps> = ({
 
             <button
               onClick={onConductDraw}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
             >
               <Shuffle className="w-4 h-4" />
               <span>Shuffle & Draw Groups</span>
@@ -301,35 +313,6 @@ export const TeamsListView: React.FC<TeamsListViewProps> = ({
                     </p>
                   </div>
                 </div>
-
-                {/* Earned Medals Preview */}
-                {(() => {
-                  const teamBadges = allAchievements.filter((a) => a.team_id === team.id);
-                  if (teamBadges.length === 0) return null;
-                  return (
-                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1 overflow-hidden">
-                        {teamBadges.slice(0, 3).map((b) => (
-                          <span
-                            key={b.id}
-                            title={`${b.title} (${b.tier})`}
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-50 border border-amber-200 text-xs shadow-2xs"
-                          >
-                            {b.icon}
-                          </span>
-                        ))}
-                        {teamBadges.length > 3 && (
-                          <span className="text-[10px] font-black text-amber-800 bg-amber-100/70 px-1 py-0.5 rounded">
-                            +{teamBadges.length - 3}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-black font-mono text-slate-500">
-                        {teamBadges.length} Medal{teamBadges.length > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* WhatsApp Contact Section */}

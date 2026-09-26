@@ -31,6 +31,8 @@ function TournamentAppInner() {
     matches,
     syncStatus,
     isSupabaseConnected,
+    hasUnsavedChanges,
+    autoSaveNow,
     finalIsTwoLegs,
     refreshData,
     setActiveTournamentId,
@@ -67,6 +69,8 @@ function TournamentAppInner() {
         onSelectTab={setCurrentTab}
         isSupabaseConnected={isSupabaseConnected}
         syncStatus={syncStatus}
+        hasUnsavedChanges={hasUnsavedChanges}
+        onForceSave={autoSaveNow}
         activeProfile={activeProfile}
         onOpenProfileSelector={() => setIsProfileModalOpen(true)}
         onOpenScoreModal={handleOpenScoreModal}

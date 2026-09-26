@@ -7,6 +7,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { Team, Match, TeamAchievement, MedalTier } from '../types/tournament';
 import { computeTeamAchievements, TIER_CONFIG, BADGE_DEFINITIONS } from '../lib/badgeEngine';
+import { SUPABASE_SQL_SCHEMA } from '../lib/constants';
 import { ClubCrest } from './ClubCrest';
 import { useTournament } from '../context/TournamentContext';
 import {
@@ -31,6 +32,9 @@ import {
   ChevronRight,
   Info,
   X,
+  Database,
+  Copy,
+  Terminal,
 } from 'lucide-react';
 
 interface TournamentWallOfFameProps {
@@ -61,8 +65,16 @@ export const TournamentWallOfFame: React.FC<TournamentWallOfFameProps> = ({
   const [inspectingBadge, setInspectingBadge] = useState<TeamAchievement | null>(null);
   const [isExportingBrag, setIsExportingBrag] = useState(false);
   const [copiedBragCaption, setCopiedBragCaption] = useState(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const bragCardRef = useRef<HTMLDivElement>(null);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
 
   // Compute all live achievements
   const allAchievements = useMemo(() => {
@@ -234,14 +246,25 @@ export const TournamentWallOfFame: React.FC<TournamentWallOfFameProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3 shadow-2xs">
-            <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xl shadow-xs">
-              🎖️
-            </div>
-            <div>
-              <div className="text-[10px] uppercase font-bold text-amber-800">Honor Roll Leader</div>
-              <div className="text-sm font-black text-slate-900 truncate">
-                {rankedTeams[0]?.team.name || 'Tournament Leader'} ({rankedTeams[0]?.trophyPoints || 0} pts)
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setIsSqlModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold border border-emerald-300 transition-colors shadow-2xs"
+              title="View and copy PostgreSQL schema for tournaments, teams, matches and medals"
+            >
+              <Database className="w-4 h-4 text-emerald-600" />
+              <span>Supabase SQL Script</span>
+            </button>
+
+            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-2.5 shadow-2xs">
+              <div className="w-9 h-9 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-lg shadow-xs">
+                🎖️
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-amber-800">Honor Roll Leader</div>
+                <div className="text-sm font-black text-slate-900 truncate max-w-[160px]">
+                  {rankedTeams[0]?.team.name || 'Leader'} ({rankedTeams[0]?.trophyPoints || 0} pts)
+                </div>
               </div>
             </div>
           </div>
@@ -685,6 +708,77 @@ export const TournamentWallOfFame: React.FC<TournamentWallOfFameProps> = ({
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium pt-2 border-t border-slate-100">
               <span>Category: <strong className="capitalize text-slate-800">{inspectingBadge.category}</strong></span>
               <span>Trophy Points: <strong className="text-amber-800 font-mono">+{BADGE_DEFINITIONS[inspectingBadge.badge_key]?.points || 100} PTS</strong></span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Supabase SQL Schema Script Modal */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 max-w-3xl w-full shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Master Supabase SQL Schema & Wall of Fame Script
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    100% idempotent SQL: Creates <code className="text-emerald-700 bg-emerald-50 px-1 rounded">tournaments</code>, <code className="text-emerald-700 bg-emerald-50 px-1 rounded">teams</code>, <code className="text-emerald-700 bg-emerald-50 px-1 rounded">matches</code>, and <code className="text-emerald-700 bg-emerald-50 px-1 rounded">team_achievements</code>.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              <span className="text-slate-600 font-medium">
+                Copy and run this in your <strong>Supabase SQL Editor</strong> to enable database storage & live syncing for all medals.
+              </span>
+              <button
+                onClick={handleCopySql}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-xs transition-colors shrink-0"
+              >
+                {copiedSql ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Full SQL</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs leading-relaxed border border-slate-800 select-all">
+              <pre className="whitespace-pre-wrap">{SUPABASE_SQL_SCHEMA}</pre>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleCopySql}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs"
+              >
+                {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'Copied to Clipboard' : 'Copy SQL Schema'}</span>
+              </button>
             </div>
           </div>
         </div>

@@ -7,7 +7,9 @@ import React, { useState } from 'react';
 import { GroupLetter, Match, Team } from '../types/tournament';
 import { calculateGroupStandings, GROUPS } from '../lib/tournamentEngine';
 import { ClubCrest } from './ClubCrest';
+import { useTournament } from '../context/TournamentContext';
 import {
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   Calendar,
@@ -19,6 +21,7 @@ import {
   Layers,
   Sparkles,
   Trophy,
+  Wrench,
 } from 'lucide-react';
 
 interface GroupStandingsViewProps {
@@ -36,8 +39,18 @@ export const GroupStandingsView: React.FC<GroupStandingsViewProps> = ({
   onNavigateToThirdPlace,
   onOpenSetupWizard,
 }) => {
+  const { resetToOfficialRoster } = useTournament();
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<GroupLetter | 'ALL'>('ALL');
   const [matchViewMode, setMatchViewMode] = useState<'standings' | 'fixtures'>('standings');
+  const [isFixingRoster, setIsFixingRoster] = useState(false);
+  const [fixSuccess, setFixSuccess] = useState(false);
+
+  // Check if any group is malformed (not exactly 4 teams)
+  const groupDistribution = GROUPS.map((g) => ({
+    group: g,
+    count: teams.filter((t) => t.group_id === g).length,
+  }));
+  const isMalformed = groupDistribution.some((gd) => gd.count !== 4) || teams.length !== 24;
 
   // Summary Metrics
   const groupMatches = matches.filter((m) => m.match_type === 'Group');
@@ -214,6 +227,49 @@ export const GroupStandingsView: React.FC<GroupStandingsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Malformed Roster / Duplicate Teams Recovery Alert */}
+      {isMalformed && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-amber-950">
+                Uneven Group Distribution or Duplicate Teams Detected
+              </h3>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Some groups do not contain exactly 4 teams. Click the repair button to instantly fix duplicates and restore all 24 official teams across Groups A to F.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={async () => {
+              setIsFixingRoster(true);
+              await resetToOfficialRoster();
+              setIsFixingRoster(false);
+              setFixSuccess(true);
+              setTimeout(() => setFixSuccess(false), 3500);
+            }}
+            disabled={isFixingRoster}
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            <Wrench className={`w-3.5 h-3.5 ${isFixingRoster ? 'animate-spin' : ''}`} />
+            <span>{isFixingRoster ? 'Fixing...' : 'Fix Duplicates & Rebalance Groups'}</span>
+          </button>
+        </div>
+      )}
+
+      {fixSuccess && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-3 shadow-xs animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div className="text-xs font-bold text-emerald-900">
+            Tournament teams repaired! All 24 teams evenly placed across Groups A through F (4 per group) and fixtures synchronized.
+          </div>
+        </div>
+      )}
 
       {/* Qualification Legend Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-600">
