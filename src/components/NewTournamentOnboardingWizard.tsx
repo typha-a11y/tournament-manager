@@ -5,6 +5,7 @@ import {
   generateIntraGroupFixtures,
   shuffleArray,
 } from '../lib/tournamentEngine';
+import { SEASON_1_INITIAL_TEAMS, SEASON_2_INITIAL_TEAMS } from '../lib/constants';
 import { ClubCrest } from './ClubCrest';
 import { AVATAR_OPTIONS } from './ProfileSelectionModal';
 import {
@@ -33,7 +34,7 @@ import {
 interface NewTournamentOnboardingWizardProps {
   isOpen: boolean;
   onClose: () => void;
-  baseTeams: Team[];
+  baseTeams?: Team[];
   onCompleteNewTournament: (
     profile: TournamentProfile,
     assignedTeams: Team[],
@@ -46,14 +47,18 @@ type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWizardProps> = ({
   isOpen,
   onClose,
-  baseTeams,
+  baseTeams = SEASON_2_INITIAL_TEAMS,
   onCompleteNewTournament,
 }) => {
   // Wizard state
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
 
+  // Season Roster Preset Selection ('season-2' or 'season-1')
+  const [selectedSeasonPreset, setSelectedSeasonPreset] = useState<'season-1' | 'season-2'>('season-2');
+  const [currentRoster, setCurrentRoster] = useState<Team[]>(SEASON_2_INITIAL_TEAMS);
+
   // Step 1: Name & Avatar
-  const [tournamentName, setTournamentName] = useState('Season 1 - E-Championship');
+  const [tournamentName, setTournamentName] = useState('Season 2 - E-Championship');
   const [selectedAvatarId, setSelectedAvatarId] = useState('trophy-gold');
   const [selectedColor, setSelectedColor] = useState('#2563eb');
 
@@ -80,43 +85,8 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
   const [isCreating, setIsCreating] = useState(false);
   const [generatedMatchesPreview, setGeneratedMatchesPreview] = useState<Match[]>([]);
 
-  // Initialize roster when opening
-  React.useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(1);
-      // Pre-populate with default groups if already assigned in baseTeams
-      const initialMap: Record<GroupLetter, Team[]> = {
-        A: [],
-        B: [],
-        C: [],
-        D: [],
-        E: [],
-        F: [],
-      };
-      const pool: Team[] = [];
-
-      baseTeams.forEach((t) => {
-        if (t.group_id && initialMap[t.group_id]) {
-          initialMap[t.group_id].push(t);
-        } else {
-          pool.push(t);
-        }
-      });
-
-      // If already perfectly 4 per group, keep them; otherwise reset
-      const allFour = GROUPS.every((g) => initialMap[g].length === 4);
-      if (allFour) {
-        setGroupAssignments(initialMap);
-        setUnassignedPool([]);
-      } else {
-        // default auto shuffle
-        performAutoShuffle([...baseTeams]);
-      }
-    }
-  }, [isOpen, baseTeams]);
-
   // Fisher-Yates Auto Shuffle
-  const performAutoShuffle = (roster: Team[] = baseTeams) => {
+  const performAutoShuffle = (roster: Team[] = currentRoster) => {
     setIsShufflingAnimation(true);
     setShuffleText('Shuffling 24 clubs into Pots 1-4...');
 
@@ -151,6 +121,51 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
       setIsShufflingAnimation(false);
     }, 900);
   };
+
+  // Handler to switch season squad presets
+  const handleSelectSeason = (seasonKey: 'season-1' | 'season-2') => {
+    setSelectedSeasonPreset(seasonKey);
+    const newRoster = seasonKey === 'season-2' ? SEASON_2_INITIAL_TEAMS : SEASON_1_INITIAL_TEAMS;
+    setCurrentRoster(newRoster);
+
+    setTournamentName((prev) => {
+      if (!prev || prev === 'Season 1 - E-Championship' || prev === 'Season 2 - E-Championship') {
+        return seasonKey === 'season-2' ? 'Season 2 - E-Championship' : 'Season 1 - E-Championship';
+      }
+      return prev;
+    });
+
+    const initialMap: Record<GroupLetter, Team[]> = {
+      A: [],
+      B: [],
+      C: [],
+      D: [],
+      E: [],
+      F: [],
+    };
+
+    newRoster.forEach((t) => {
+      if (t.group_id && initialMap[t.group_id]) {
+        initialMap[t.group_id].push(t);
+      }
+    });
+
+    const allFour = GROUPS.every((g) => initialMap[g].length === 4);
+    if (allFour) {
+      setGroupAssignments(initialMap);
+      setUnassignedPool([]);
+    } else {
+      performAutoShuffle([...newRoster]);
+    }
+  };
+
+  // Initialize roster when opening wizard
+  React.useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(1);
+      handleSelectSeason('season-2');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -334,6 +349,62 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
               </div>
 
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                {/* Season Preset Selection */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Tournament Season & Squad Preset
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSeason('season-2')}
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        selectedSeasonPreset === 'season-2'
+                          ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black uppercase text-blue-700 tracking-wider flex items-center gap-1.5">
+                          <Flame className="w-4 h-4 text-orange-500 fill-orange-500" />
+                          Season 2 (New Squads)
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white">
+                          24 Teams
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-900 mb-1">Official Tournament Graphic</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Huncho (Man Utd), The G.O.A.T (Real Madrid), Wizzmeek (Ajax), Build Up (Hull City), Elly Hunter (Leverkusen), Enthy01 (Como), etc.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSeason('season-1')}
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        selectedSeasonPreset === 'season-1'
+                          ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/20 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
+                          <Trophy className="w-4 h-4 text-amber-500" />
+                          Season 1 (Classic)
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-700">
+                          24 Teams
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-900 mb-1">Original Season 1 Roster</p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Huncho (Man Utd), Christian (Arsenal), She Cheated Me (Barca), Jazzynorman (Corinthians), Elly Hunter (Liverpool), etc.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                     Tournament Name
@@ -342,7 +413,7 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                     type="text"
                     value={tournamentName}
                     onChange={(e) => setTournamentName(e.target.value)}
-                    placeholder="e.g. Season 1 - E-Championship"
+                    placeholder="e.g. Season 2 - E-Championship"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
@@ -415,23 +486,53 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
           {/* ================= STEP 2: ROSTER & LOGOS REVIEW (4x6 GRID) ================= */}
           {currentStep === 2 && (
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <Users className="w-5 h-5 text-blue-600" />
                     Tournament Roster & Authentic Club Crests (24 Teams)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Verify all 24 registered player-club pairings participating in this season.
+                    {selectedSeasonPreset === 'season-2'
+                      ? 'Season 2 Official Squads from Graphic — 24 player-club pairings with authentic logos.'
+                      : 'Season 1 Classic Squads — 24 player-club pairings with authentic logos.'}
                   </p>
                 </div>
-                <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold shrink-0">
-                  24 Clubs Registered
-                </span>
+
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSeason('season-2')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        selectedSeasonPreset === 'season-2'
+                          ? 'bg-white text-blue-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      🔥 Season 2 (24)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSeason('season-1')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        selectedSeasonPreset === 'season-1'
+                          ? 'bg-white text-blue-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      🏆 Season 1 (24)
+                    </button>
+                  </div>
+
+                  <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-bold shrink-0">
+                    24 Clubs
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {baseTeams.map((team, idx) => (
+                {currentRoster.map((team, idx) => (
                   <div
                     key={team.id || idx}
                     className="bg-white rounded-xl border border-slate-200 p-3 flex flex-col items-center text-center shadow-2xs hover:shadow-xs transition-shadow"
@@ -448,8 +549,10 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                         {idx + 1}
                       </span>
                     </div>
-                    <div className="text-xs font-bold text-slate-900 line-clamp-1">{team.name}</div>
-                    <div className="text-[11px] text-slate-500 line-clamp-1">
+                    <div className="text-xs font-black text-slate-900 line-clamp-1 uppercase tracking-tight">
+                      {team.name}
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500 line-clamp-1">
                       {team.club_crest_name || 'Club'}
                     </div>
                   </div>
@@ -539,15 +642,31 @@ export const NewTournamentOnboardingWizard: React.FC<NewTournamentOnboardingWiza
                       <span className="text-xs font-bold text-slate-800">
                         Unassigned Teams Pool ({unassignedPool.length} Remaining)
                       </span>
-                      {unassignedPool.length > 0 && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={handleAutoFillRemaining}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          type="button"
+                          onClick={() => {
+                            const pool = currentRoster.map((t) => ({ ...t, group_id: null, pot: undefined }));
+                            setUnassignedPool(pool);
+                            setGroupAssignments({ A: [], B: [], C: [], D: [], E: [], F: [] });
+                            setSelectedPoolTeamId(null);
+                          }}
+                          className="text-xs font-semibold text-slate-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
                         >
-                          <Zap className="w-3.5 h-3.5" />
-                          <span>Auto-Fill Remaining</span>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Clear to Pool</span>
                         </button>
-                      )}
+                        {unassignedPool.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleAutoFillRemaining}
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Auto-Fill Remaining</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {unassignedPool.length === 0 ? (

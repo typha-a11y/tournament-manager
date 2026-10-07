@@ -1,6 +1,6 @@
 import { ClubLogoOption, Team } from '../types/tournament';
 
-export const OFFICIAL_TEAM_DATA_LIST: {
+export const SEASON_1_TEAM_DATA_LIST: {
   name: string;
   clubName: string;
   clubShort: string;
@@ -252,6 +252,271 @@ export const OFFICIAL_TEAM_DATA_LIST: {
   },
 ];
 
+// Alias for 100% backward compatibility
+export const OFFICIAL_TEAM_DATA_LIST = SEASON_1_TEAM_DATA_LIST;
+
+/**
+ * Official Season 2 Squad List from Tournament Graphic
+ * 24 Verified player-club pairings with authentic high-resolution crests
+ */
+export const SEASON_2_TEAM_DATA_LIST: {
+  name: string;
+  clubName: string;
+  clubShort: string;
+  logoUrl: string;
+  groupId: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+  pot: number;
+  whatsapp?: string;
+  phone?: string;
+}[] = [
+  // GROUP A
+  {
+    name: 'Huncho',
+    clubName: 'Manchester United',
+    clubShort: 'MUN',
+    logoUrl: 'https://crests.football-data.org/66.png',
+    groupId: 'A',
+    pot: 1,
+    whatsapp: '+255 749 541 001',
+    phone: '+255 749 541 001',
+  },
+  {
+    name: 'The G.O.A.T',
+    clubName: 'Real Madrid',
+    clubShort: 'RMA',
+    logoUrl: 'https://crests.football-data.org/86.png',
+    groupId: 'A',
+    pot: 2,
+    whatsapp: '+255 678 958 677',
+    phone: '+255 678 958 677',
+  },
+  {
+    name: 'Wizzmeek',
+    clubName: 'AFC Ajax',
+    clubShort: 'AJX',
+    logoUrl: 'https://crests.football-data.org/678.png',
+    groupId: 'A',
+    pot: 3,
+    whatsapp: '+255 763 580 120',
+    phone: '+255 763 580 120',
+  },
+  {
+    name: 'Y.B.W.Y.B',
+    clubName: 'AC Milan',
+    clubShort: 'MIL',
+    logoUrl: 'https://crests.football-data.org/98.png',
+    groupId: 'A',
+    pot: 4,
+    whatsapp: '',
+    phone: '',
+  },
+  // GROUP B
+  {
+    name: 'Build Up',
+    clubName: 'Hull City',
+    clubShort: 'HUL',
+    logoUrl: 'https://crests.football-data.org/322.png',
+    groupId: 'B',
+    pot: 1,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Elly Hunter',
+    clubName: 'Bayer Leverkusen',
+    clubShort: 'B04',
+    logoUrl: 'https://crests.football-data.org/7.png',
+    groupId: 'B',
+    pot: 2,
+    whatsapp: '+255 766 692 031',
+    phone: '+255 766 692 031',
+  },
+  {
+    name: 'Roger Muncaster',
+    clubName: 'Paris Saint-Germain',
+    clubShort: 'PSG',
+    logoUrl: 'https://crests.football-data.org/524.png',
+    groupId: 'B',
+    pot: 3,
+    whatsapp: '+255 745 630 931',
+    phone: '+255 745 630 931',
+  },
+  {
+    name: 'Sad Sometimes',
+    clubName: 'Atlético Madrid',
+    clubShort: 'ATM',
+    logoUrl: 'https://crests.football-data.org/78.png',
+    groupId: 'B',
+    pot: 4,
+    whatsapp: '',
+    phone: '',
+  },
+  // GROUP C
+  {
+    name: 'Bobe',
+    clubName: 'Bayern Munich',
+    clubShort: 'BAY',
+    logoUrl: 'https://crests.football-data.org/5.png',
+    groupId: 'C',
+    pot: 1,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Nenga',
+    clubName: 'FC Porto',
+    clubShort: 'POR',
+    logoUrl: 'https://crests.football-data.org/503.png',
+    groupId: 'C',
+    pot: 2,
+    whatsapp: '+255 759 465 474',
+    phone: '+255 759 465 474',
+  },
+  {
+    name: 'Christian',
+    clubName: 'Arsenal',
+    clubShort: 'ARS',
+    logoUrl: 'https://crests.football-data.org/57.png',
+    groupId: 'C',
+    pot: 3,
+    whatsapp: '+255 762 530 394',
+    phone: '+255 762 530 394',
+  },
+  {
+    name: 'She Cheated Me',
+    clubName: 'FC Barcelona',
+    clubShort: 'BAR',
+    logoUrl: 'https://crests.football-data.org/81.png',
+    groupId: 'C',
+    pot: 4,
+    whatsapp: '+255 769 798 269',
+    phone: '+255 769 798 269',
+  },
+  // GROUP D
+  {
+    name: 'Shakazulu',
+    clubName: 'Brighton & Hove Albion',
+    clubShort: 'BHA',
+    logoUrl: 'https://crests.football-data.org/397.png',
+    groupId: 'D',
+    pot: 1,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'I Hate My Ex',
+    clubName: 'Chelsea FC',
+    clubShort: 'CHE',
+    logoUrl: 'https://crests.football-data.org/61.png',
+    groupId: 'D',
+    pot: 2,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Melaka',
+    clubName: 'Brighton & Hove Albion',
+    clubShort: 'BHA',
+    logoUrl: 'https://crests.football-data.org/397.png',
+    groupId: 'D',
+    pot: 3,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Kimm',
+    clubName: 'Manchester City',
+    clubShort: 'MCI',
+    logoUrl: 'https://crests.football-data.org/65.png',
+    groupId: 'D',
+    pot: 4,
+    whatsapp: '',
+    phone: '',
+  },
+  // GROUP E
+  {
+    name: '45balo',
+    clubName: 'Nottingham Forest',
+    clubShort: 'NFO',
+    logoUrl: 'https://crests.football-data.org/351.png',
+    groupId: 'E',
+    pot: 1,
+    whatsapp: '+255 615 364 284',
+    phone: '+255 615 364 284',
+  },
+  {
+    name: 'Enthy01',
+    clubName: 'Como 1907',
+    clubShort: 'COM',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Como_1907_logo.svg',
+    groupId: 'E',
+    pot: 2,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Budo',
+    clubName: 'Aston Villa',
+    clubShort: 'AVL',
+    logoUrl: 'https://crests.football-data.org/58.png',
+    groupId: 'E',
+    pot: 3,
+    whatsapp: '+255 690 913 729',
+    phone: '+255 690 913 729',
+  },
+  {
+    name: 'Ice Maestro',
+    clubName: 'Inter Miami',
+    clubShort: 'MIA',
+    logoUrl: 'https://images.fotmob.com/image_resources/logo/teamlogo/1126742.png',
+    groupId: 'E',
+    pot: 4,
+    whatsapp: '+255 755 679 819',
+    phone: '+255 755 679 819',
+  },
+  // GROUP F
+  {
+    name: 'Muuh',
+    clubName: 'SSC Napoli',
+    clubShort: 'NAP',
+    logoUrl: 'https://crests.football-data.org/113.png',
+    groupId: 'F',
+    pot: 1,
+    whatsapp: '+255 717 921 961',
+    phone: '+255 717 921 961',
+  },
+  {
+    name: 'Benin',
+    clubName: 'Chelsea FC',
+    clubShort: 'CHE',
+    logoUrl: 'https://crests.football-data.org/61.png',
+    groupId: 'F',
+    pot: 2,
+    whatsapp: '+255 712 551 567',
+    phone: '+255 712 551 567',
+  },
+  {
+    name: 'SunnyLVC',
+    clubName: 'Liverpool FC',
+    clubShort: 'LIV',
+    logoUrl: 'https://crests.football-data.org/64.png',
+    groupId: 'F',
+    pot: 3,
+    whatsapp: '',
+    phone: '',
+  },
+  {
+    name: 'Masoud',
+    clubName: 'Borussia Dortmund',
+    clubShort: 'BVB',
+    logoUrl: 'https://crests.football-data.org/4.png',
+    groupId: 'F',
+    pot: 4,
+    whatsapp: '',
+    phone: '',
+  },
+];
+
 export const OFFICIAL_TEAM_NAMES: string[] = OFFICIAL_TEAM_DATA_LIST.map((t) => t.name);
 
 export const REAL_FOOTBALL_CLUBS: ClubLogoOption[] = [
@@ -417,9 +682,33 @@ export const REAL_FOOTBALL_CLUBS: ClubLogoOption[] = [
     logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Logo_of_AC_Milan.svg',
     primaryColor: '#FB090B',
   },
+  {
+    name: 'Hull City',
+    shortName: 'HUL',
+    logoUrl: 'https://crests.football-data.org/322.png',
+    primaryColor: '#F5A623',
+  },
+  {
+    name: 'Bayer Leverkusen',
+    shortName: 'B04',
+    logoUrl: 'https://crests.football-data.org/7.png',
+    primaryColor: '#E32221',
+  },
+  {
+    name: 'FC Porto',
+    shortName: 'POR',
+    logoUrl: 'https://crests.football-data.org/503.png',
+    primaryColor: '#0038A8',
+  },
+  {
+    name: 'Como 1907',
+    shortName: 'COM',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Como_1907_logo.svg',
+    primaryColor: '#003B70',
+  },
 ];
 
-export const INITIAL_TEAMS: Team[] = OFFICIAL_TEAM_DATA_LIST.map((item, index) => {
+export const SEASON_1_INITIAL_TEAMS: Team[] = SEASON_1_TEAM_DATA_LIST.map((item, index) => {
   return {
     id: `team-${index + 1}`,
     name: item.name,
@@ -431,6 +720,22 @@ export const INITIAL_TEAMS: Team[] = OFFICIAL_TEAM_DATA_LIST.map((item, index) =
     phone: item.phone || '',
   };
 });
+
+export const SEASON_2_INITIAL_TEAMS: Team[] = SEASON_2_TEAM_DATA_LIST.map((item, index) => {
+  return {
+    id: `team-s2-${index + 1}`,
+    name: item.name,
+    logo_url: item.logoUrl,
+    group_id: item.groupId,
+    club_crest_name: item.clubName,
+    pot: item.pot,
+    whatsapp: item.whatsapp || '',
+    phone: item.phone || '',
+  };
+});
+
+// Default initial teams (Season 1)
+export const INITIAL_TEAMS: Team[] = SEASON_1_INITIAL_TEAMS;
 
 export const SUPABASE_SQL_SCHEMA = `-- =========================================================================
 -- eFootball Tournament Management - Complete Master Database SQL Schema

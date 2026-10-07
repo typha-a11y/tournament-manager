@@ -5,7 +5,12 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { GroupLetter, Match, Team, TournamentProfile } from '../types/tournament';
-import { INITIAL_TEAMS, OFFICIAL_TEAM_DATA_LIST } from '../lib/constants';
+import {
+  INITIAL_TEAMS,
+  OFFICIAL_TEAM_DATA_LIST,
+  SEASON_1_TEAM_DATA_LIST,
+  SEASON_2_TEAM_DATA_LIST,
+} from '../lib/constants';
 import {
   generateGroupMatches,
   generateRoundOf16Matches,
@@ -163,17 +168,28 @@ export function sanitizeAndDeduplicateTeams(rawTeams: Team[]): Team[] {
     }
   });
 
-  // 2. Check if uniqueTeams is healthy (e.g., at least 20 unique teams with valid names)
+  // 2. Detect which season this roster belongs to
+  const season2Matches = uniqueTeams.filter((u) =>
+    SEASON_2_TEAM_DATA_LIST.some(
+      (s2) => s2.name.toLowerCase().trim() === (u.name || '').toLowerCase().trim()
+    )
+  ).length;
+
+  const isSeason2Roster = season2Matches >= 8;
+  const targetOfficialList = isSeason2Roster ? SEASON_2_TEAM_DATA_LIST : SEASON_1_TEAM_DATA_LIST;
+
   const isHealthyRoster =
     uniqueTeams.length >= 20 &&
-    OFFICIAL_TEAM_DATA_LIST.filter((o) =>
-      uniqueTeams.some((u) => u.name.toLowerCase().trim() === o.name.toLowerCase().trim())
-    ).length >= 16;
+    (isSeason2Roster
+      ? season2Matches >= 8
+      : SEASON_1_TEAM_DATA_LIST.filter((o) =>
+          uniqueTeams.some((u) => u.name.toLowerCase().trim() === o.name.toLowerCase().trim())
+        ).length >= 10);
 
-  // 3. If the roster was heavily corrupted (e.g. all set to Christian or < 16 recognized teams), rebuild from official list
+  // 3. If the roster was heavily corrupted (e.g. < 20 teams), rebuild from appropriate season official list
   if (!isHealthyRoster || uniqueTeams.length !== 24) {
     // Reconstruct clean 24 teams preserving any legitimate custom WhatsApp contacts or edits if matched
-    return OFFICIAL_TEAM_DATA_LIST.map((official, idx) => {
+    return targetOfficialList.map((official, idx) => {
       const existingUserEdit = uniqueTeams.find(
         (u) => u.name.toLowerCase().trim() === official.name.toLowerCase().trim()
       );
@@ -214,9 +230,9 @@ export function sanitizeAndDeduplicateTeams(rawTeams: Team[]): Team[] {
   if (needsGroupRebalance || Object.values(groupCounts).some((c) => c !== 4)) {
     return uniqueTeams.map((t, idx) => {
       const lowerName = (t.name || '').toLowerCase().trim();
-      const official = OFFICIAL_TEAM_DATA_LIST.find(
-        (o) => o.name.toLowerCase().trim() === lowerName
-      ) || OFFICIAL_TEAM_DATA_LIST[idx];
+      const official =
+        targetOfficialList.find((o) => o.name.toLowerCase().trim() === lowerName) ||
+        targetOfficialList[idx];
 
       const clubName = t.club_crest_name || official?.clubName || 'Club';
       const reliableLogo = getReliableClubLogo(clubName, t.logo_url || official?.logoUrl);
@@ -227,8 +243,8 @@ export function sanitizeAndDeduplicateTeams(rawTeams: Team[]): Team[] {
         name: t.name || official?.name || `Team ${idx + 1}`,
         club_crest_name: clubName,
         logo_url: reliableLogo,
-        group_id: (official?.groupId || GROUPS[Math.floor(idx / 4)] || 'A') as GroupLetter,
-        pot: official?.pot || ((idx % 4) + 1),
+        group_id: (t.group_id || official?.groupId || GROUPS[Math.floor(idx / 4)] || 'A') as GroupLetter,
+        pot: t.pot || official?.pot || ((idx % 4) + 1),
         whatsapp: t.whatsapp || t.phone || official?.whatsapp || '',
         phone: t.phone || t.whatsapp || official?.phone || '',
       };
@@ -238,9 +254,10 @@ export function sanitizeAndDeduplicateTeams(rawTeams: Team[]): Team[] {
   // Standard enrichment for healthy 24-team list
   return uniqueTeams.map((t, idx) => {
     const lowerName = (t.name || '').toLowerCase().trim();
-    const official = OFFICIAL_TEAM_DATA_LIST.find(
-      (o) => o.name.toLowerCase().trim() === lowerName
-    );
+    const official =
+      targetOfficialList.find((o) => o.name.toLowerCase().trim() === lowerName) ||
+      SEASON_2_TEAM_DATA_LIST.find((o) => o.name.toLowerCase().trim() === lowerName) ||
+      SEASON_1_TEAM_DATA_LIST.find((o) => o.name.toLowerCase().trim() === lowerName);
 
     const clubCrestName = t.club_crest_name || official?.clubName || 'Club';
     const reliableLogo = getReliableClubLogo(clubCrestName, t.logo_url || official?.logoUrl);

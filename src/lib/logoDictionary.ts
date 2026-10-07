@@ -191,14 +191,49 @@ export const CLUB_LOGO_REGISTRY: Record<string, ClubLogoEntry> = {
     shortCode: 'CHE',
     primaryLogoUrl: 'https://crests.football-data.org/61.png',
     fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/en/c/cc/Chelsea_FC.svg',
-    playerAliases: ['chelsea', 'blues', 'cfc'],
+    playerAliases: ['chelsea', 'blues', 'cfc', 'chelsea fc', 'i hate my ex', 'benin'],
   },
   'ac milan': {
     clubName: 'AC Milan',
     shortCode: 'MIL',
     primaryLogoUrl: 'https://crests.football-data.org/98.png',
     fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Logo_of_AC_Milan.svg',
-    playerAliases: ['milan', 'rossoneri', 'acm'],
+    playerAliases: ['milan', 'rossoneri', 'acm', 'y.b.w.y.b', 'ybwyb'],
+  },
+  'hull city': {
+    clubName: 'Hull City',
+    shortCode: 'HUL',
+    primaryLogoUrl: 'https://crests.football-data.org/322.png',
+    fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/en/5/54/Hull_City_A.F.C._logo.svg',
+    playerAliases: ['hull city', 'hull', 'hull city afc', 'build up'],
+  },
+  'bayer leverkusen': {
+    clubName: 'Bayer Leverkusen',
+    shortCode: 'B04',
+    primaryLogoUrl: 'https://crests.football-data.org/7.png',
+    fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/en/5/59/Bayer_04_Leverkusen_logo.svg',
+    playerAliases: ['leverkusen', 'bayer 04 leverkusen', 'b04', 'elly hunter'],
+  },
+  'fc porto': {
+    clubName: 'FC Porto',
+    shortCode: 'POR',
+    primaryLogoUrl: 'https://crests.football-data.org/503.png',
+    fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/en/f/f1/FC_Porto.svg',
+    playerAliases: ['porto', 'fc porto', 'fcp'],
+  },
+  'como 1907': {
+    clubName: 'Como 1907',
+    shortCode: 'COM',
+    primaryLogoUrl: 'https://upload.wikimedia.org/wikipedia/commons/1/17/Como_1907_logo.svg',
+    fallbackLogoUrl: 'https://crests.football-data.org/1079.png',
+    playerAliases: ['como', 'como 1907', 'enthy01', 'enthy'],
+  },
+  'manchester city': {
+    clubName: 'Manchester City',
+    shortCode: 'MCI',
+    primaryLogoUrl: 'https://crests.football-data.org/65.png',
+    fallbackLogoUrl: 'https://upload.wikimedia.org/wikipedia/en/e/eb/Manchester_City_FC_badge.svg',
+    playerAliases: ['man city', 'mancity', 'city', 'kimm'],
   },
 };
 
@@ -261,26 +296,26 @@ export function getReliableClubLogo(
   const raw = identifier.trim();
   const normalized = cleanKey(raw);
 
-  // 1. Direct check in 24-player mapping
-  if (PLAYER_TO_CLUB_MAP[normalized]) {
-    const clubKey = PLAYER_TO_CLUB_MAP[normalized];
-    if (CLUB_LOGO_REGISTRY[clubKey]) {
-      return CLUB_LOGO_REGISTRY[clubKey].primaryLogoUrl;
-    }
-  }
-
-  // 2. Direct key match in registry
+  // 1. Direct key match in registry (e.g. 'manchester united', 'bayer leverkusen', 'hull city')
   if (CLUB_LOGO_REGISTRY[normalized]) {
     return CLUB_LOGO_REGISTRY[normalized].primaryLogoUrl;
   }
 
-  // 3. Exact match on clubName
-  for (const [key, entry] of Object.entries(CLUB_LOGO_REGISTRY)) {
+  // 2. Exact match on clubName or shortCode
+  for (const entry of Object.values(CLUB_LOGO_REGISTRY)) {
     if (cleanKey(entry.clubName) === normalized) {
       return entry.primaryLogoUrl;
     }
     if (entry.shortCode.toLowerCase() === normalized) {
       return entry.primaryLogoUrl;
+    }
+  }
+
+  // 3. Direct check in 24-player mapping
+  if (PLAYER_TO_CLUB_MAP[normalized]) {
+    const clubKey = PLAYER_TO_CLUB_MAP[normalized];
+    if (CLUB_LOGO_REGISTRY[clubKey]) {
+      return CLUB_LOGO_REGISTRY[clubKey].primaryLogoUrl;
     }
   }
 

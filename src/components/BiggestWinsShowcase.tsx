@@ -28,6 +28,7 @@ interface BiggestWinsShowcaseProps {
   matches: Match[];
   teams: Team[];
   onOpenScoreModal?: (match: Match) => void;
+  tournamentName?: string;
 }
 
 type WinCategory = 'biggest_margin' | 'high_scoring' | 'clean_sheets' | 'knockout_thrillers';
@@ -36,6 +37,7 @@ export const BiggestWinsShowcase: React.FC<BiggestWinsShowcaseProps> = ({
   matches,
   teams,
   onOpenScoreModal,
+  tournamentName,
 }) => {
   const [activeCategory, setActiveCategory] = useState<WinCategory>('biggest_margin');
   const [selectedShareMatch, setSelectedShareMatch] = useState<Match | null>(null);
@@ -558,6 +560,7 @@ export const BiggestWinsShowcase: React.FC<BiggestWinsShowcaseProps> = ({
           match={selectedShareMatch}
           homeTeam={getTeam(selectedShareMatch.home_team_id)}
           awayTeam={getTeam(selectedShareMatch.away_team_id)}
+          tournamentName={tournamentName}
         />
       )}
     </div>
